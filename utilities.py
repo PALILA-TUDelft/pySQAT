@@ -1,3 +1,8 @@
+
+##########################
+#### UTILITIES MODULE ####
+##########################
+
 from scipy.interpolate import interp1d
 import numpy as np
 import matplotlib.pyplot as plt
@@ -5,13 +10,17 @@ from scipy.io import wavfile
 from IPython.display import Audio, display
 import os
 
+# ----------------------
+#### MAIN FUNCTIONS ####
+# ----------------------
+
 def see(file_path):
     """
     Loads a WAV file, displays its waveform and spectrogram (with min/max frequency range), 
     and plays the audio.
 
     Parameters:
-        file_path (str): Path to the WAV file.
+¡       file_path (str): Path to the WAV file.
 
     Returns:
         None
@@ -77,14 +86,10 @@ def hz2bark(f):
     Gerard Mendoza Ferrandis - 06/05/2025
 
     Parameters:
-    -----------
-    f : float or array-like
-        Frequency in Hz.
+    f (float or array-like): Frequency in Hz.
 
     Returns:
-    --------
-    z : float or ndarray
-        Frequency in Barks.
+    z (float or ndarray): Frequency in Barks.
     """
     f = np.asarray(f)  # Support scalar or array input
     z = 13 * np.arctan(0.76 * (f / 1000)) + 3.5 * np.arctan((f / (1000 * 7.5))**2)
@@ -101,14 +106,10 @@ def bark2hz(z):
     Gerard Mendoza Ferrandis - 06/05/2025
 
     Parameters:
-    -----------
-    z : float or array-like
-        Bark scale values to be converted to Hz.
+        z (float or array-like): Bark scale values to be converted to Hz.
 
     Returns:
-    --------
-    f_interp : float or ndarray
-        Frequency in Hz corresponding to the given Bark values.
+        f_interp (float or ndarray): Frequency in Hz corresponding to the given Bark values.
     """
     f0 = 1000
     k = np.arange(-20, 13)  # Equivalent to MATLAB -20:12
@@ -132,14 +133,10 @@ def phon2sone(phon):
     Gerard Mendoza Ferrandis - 06/05/2025
 
     Parameters:
-    -----------
-    phon: np.ndarray
-    Loudness level in phons. Can be a list or array-like.
+        phon (np.ndarray): Loudness level in phons. Can be a list or array-like.
     
     Returns:
-    -----------
-    sone: np.ndarray
-    Loudness in sones, as a column vector.
+        sone (np.ndarray): Loudness in sones, as a column vector.
     """
     phon = np.asarray(phon).flatten()  # Ensure 1D array
     phon = phon[:, np.newaxis]  # Convert to column vector [nTime, 1]
@@ -156,7 +153,7 @@ def phon2sone(phon):
 
     return sone
 
-def sone2phon_local(sone):
+def sone2phon(sone):
     """
     Converts loudness from sone to phon according to ISO 532-1:2017.
     
@@ -167,14 +164,10 @@ def sone2phon_local(sone):
     Gerard Mendoza Ferrandis - 06/05/2025
 
     Parameters:
-    -----------
-    sone: array-like
-    Loudness in sone (1D array).
+        sone (array-like): Loudness in sone (1D array).
         
     Returns:
-    -----------
-    phon: np.ndarray
-    Loudness level in phon.
+        phon (np.ndarray): Loudness level in phon.
     """
     sone = np.atleast_1d(sone).astype(float)
     sone = sone.reshape(-1, 1) if sone.ndim == 1 else sone
@@ -187,9 +180,17 @@ def sone2phon_local(sone):
 
     return phon
 
+# ----------------------------
+#### VALIDATION FUNCTIONS ####
+# ----------------------------
 if __name__ == "__main__":
+
     #see("sound_files\ExStereo_TrainStation7-0100-0130.wav")
-    z = hz2bark(1000)
-    print(z)
-    f = bark2hz(z)
-    print(f)
+
+    # z = hz2bark(1000)
+    # print(z)
+    # f = bark2hz(z)
+    # print(f)
+
+    output = get_statistics('sound_files\ExSignal_A320_auralized_departure_104dBFS.wav', 'Loudness_ISO532_1')
+    print(output)
