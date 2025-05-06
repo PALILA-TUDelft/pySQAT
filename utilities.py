@@ -1,6 +1,4 @@
-import numpy as np
 from scipy.interpolate import interp1d
-
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.io import wavfile
@@ -76,7 +74,7 @@ def hz2bark(f):
     hz2bark_local.m   (Osses, 2014) [Last Update: 15/08/2014]
 
     PYTHON IMPLEMENTATION:
-    Gerard Mendoza Ferrandis - 6/05/2025
+    Gerard Mendoza Ferrandis - 06/05/2025
 
     Parameters:
     -----------
@@ -92,15 +90,15 @@ def hz2bark(f):
     z = 13 * np.arctan(0.76 * (f / 1000)) + 3.5 * np.arctan((f / (1000 * 7.5))**2)
     return z
 
-def bark2hz_local(z):
+def bark2hz(z):
     """
     Converts Bark values to Hertz using interpolation.
 
     ORIGINAL MATLAB CODE:
-    hz2bark_local.m   (Osses, 2014) [Last Update: 15/08/2014]
+    bark2hz_local.m   (Osses, 2014) [Last Update: 25/09/2014]
 
     PYTHON IMPLEMENTATION:
-    Gerard Mendoza Ferrandis - 6/05/2025
+    Gerard Mendoza Ferrandis - 06/05/2025
 
     Parameters:
     -----------
@@ -123,9 +121,75 @@ def bark2hz_local(z):
 
     return f_interp
 
+def phon2sone(phon):
+    """
+    Converts loudness from phon to sone according to ISO 532-1:2017.
+
+    ORIGINAL MATLAB CODE:
+    phon2sone_local.m   (Osses, 2014) [Last Update: 25/09/2014] (?)
+
+    PYTHON IMPLEMENTATION:
+    Gerard Mendoza Ferrandis - 06/05/2025
+
+    Parameters:
+    -----------
+    phon: np.ndarray
+    Loudness level in phons. Can be a list or array-like.
+    
+    Returns:
+    -----------
+    sone: np.ndarray
+    Loudness in sones, as a column vector.
+    """
+    phon = np.asarray(phon).flatten()  # Ensure 1D array
+    phon = phon[:, np.newaxis]  # Convert to column vector [nTime, 1]
+    
+    sone = np.zeros_like(phon)
+
+    idx = phon >= 40
+
+    # Calculate sone values for phon >= 40
+    sone[idx] = 2 ** (0.1 * (phon[idx] - 40))
+
+    # Calculate sone values for phon < 40
+    sone[~idx] = (phon[~idx] / 40) ** (1 / 0.35)
+
+    return sone
+
+def sone2phon_local(sone):
+    """
+    Converts loudness from sone to phon according to ISO 532-1:2017.
+    
+    ORIGINAL MATLAB CODE:
+    sone2phon_local.m   (Osses, 2014) [Last Update: 25/09/2014] (?)
+
+    PYTHON IMPLEMENTATION:
+    Gerard Mendoza Ferrandis - 06/05/2025
+
+    Parameters:
+    -----------
+    sone: array-like
+    Loudness in sone (1D array).
+        
+    Returns:
+    -----------
+    phon: np.ndarray
+    Loudness level in phon.
+    """
+    sone = np.atleast_1d(sone).astype(float)
+    sone = sone.reshape(-1, 1) if sone.ndim == 1 else sone
+
+    phon = np.zeros_like(sone)
+
+    idx = sone >= 1
+    phon[idx] = 40 + 33.22 * np.log10(sone[idx])
+    phon[~idx] = 40 * np.power(sone[~idx] + 0.0005, 0.35)
+
+    return phon
+
 if __name__ == "__main__":
     #see("sound_files\ExStereo_TrainStation7-0100-0130.wav")
     z = hz2bark(1000)
     print(z)
-    f = bark2hz_local(z)
+    f = bark2hz(z)
     print(f)
