@@ -37,7 +37,7 @@ def ob13_iso532_1(
     Do_OB13_ISO532_1.m   (Manor, 2015) (Felix Greco, 2023) [Last Update: 20/10/2023]
 
     PYTHON IMPLEMENTATION:
-    Gerard Mendoza Ferrandis - 2023-10-01
+    Gerard Mendoza Ferrandis - 02/05/2025
 
     Parameters
     ----------
@@ -221,7 +221,7 @@ def gen_weighting_filters(
     Gen_weighting_filters.m   (Osses, Lotinga, 2016) [Last Update:03/04/2025]
 
     PYTHON IMPLEMENTATION:
-    Gerard Mendoza Ferrandis - 2023-10-01
+    Gerard Mendoza Ferrandis - 02/05/2025
 
     Parameters
     ----------
@@ -323,7 +323,7 @@ def do_slm(
     Do_SLM.m   (Osses, 2016) [Last Update: 22/03/2023]
 
     PYTHON IMPLEMENTATION:
-    Gerard Mendoza Ferrandis - 2023-10-01
+    Gerard Mendoza Ferrandis - 02/05/2025
 
     Parameters
     ----------
@@ -396,7 +396,7 @@ def get_leq(
     Get_Leq.m   (Osses, 2014-2017) [Last Update: 13/07/2016]
 
     PYTHON IMPLEMENTATION:
-    Gerard Mendoza Ferrandis - 2023-10-01
+    Gerard Mendoza Ferrandis - 02/05/2025
 
     Parameters
     ----------
