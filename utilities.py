@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 from scipy.io import wavfile
 from IPython.display import Audio, display
 import os
+import warnings
 
 # ----------------------
 #### MAIN FUNCTIONS ####
@@ -18,6 +19,9 @@ def see(file_path):
     """
     Loads a WAV file, displays its waveform and spectrogram (with min/max frequency range), 
     and plays the audio.
+
+    PYTHON IMPLEMENTATION:
+    Gerard Mendoza Ferrandis - 07/05/2025
 
     Parameters:
 ¡       file_path (str): Path to the WAV file.
@@ -70,10 +74,6 @@ def see(file_path):
 
     plt.tight_layout()
     plt.show()
-
-    # Play audio
-    print("Playing audio:")
-    display(Audio(data, rate=sample_rate))
 
 def hz2bark(f):
     """
@@ -180,17 +180,151 @@ def sone2phon(sone):
 
     return phon
 
+def get_exceeded_value(x, percent):
+    """
+    Value that is exceeded *percent* % of the time for each channel in x.
+
+    ORIGINAL MATLAB CODE:
+    get_exceeded_value.m [Last Update: 24/04/2025]
+
+    PYTHON IMPLEMENTATION:
+    Gerard Mendoza Ferrandis - 07/05/2025
+
+    Parameters
+    ----------
+    x (array-like): Data to be analyzed (1-D or 2-D array).
+    percent (int or float): Percentage of exceedance (1–99).
+
+    Returns
+    -------
+    values (ndarray): 1-D array of values that are exceeded *percent* % of the time.
+    """
+    x = np.asarray(x)
+
+    # Accept row-vector input and transpose so that time is axis-0
+    if x.ndim == 1:
+        x = x[:, None]
+    elif x.shape[1] > 3 and x.shape[0] <= 3:
+        x = x.T
+
+    if x.shape[1] > 3:
+        raise ValueError("Input has more than three channels.")
+
+    n = x.shape[0]
+    idx = int(np.floor((100 - percent) / 100 * n))
+    idx = max(idx - 1, 0)  # shift to 0-based, ensure non-negative
+
+    values = np.sort(x, axis=0)[idx, :]
+
+    return values
+
+def get_statistics(data, metric):
+    """
+    Compute a suite of statistics for *data* and return them in a dict whose
+    keys mirror the MATLAB field-names (e.g. 'Nmax', 'N1', …).
+
+    ORIGINAL MATLAB CODE:
+    get_exceeded_value.m [Last Update: 19/02/2025]
+
+    PYTHON IMPLEMENTATION:
+    Gerard Mendoza Ferrandis - 07/05/2025
+
+    Parameters
+    ----------
+    data (array-like): Data to be analyzed (1-D or 2-D array).
+    metric (str): One of the verbose metric labels, e.g. 'Loudness_ISO532_1'.
+
+    Returns
+    -------
+    out (dict): Keys are <prefix><statLabel>; values are 1-D NumPy arrays (length C).
+    For a single-channel input the arrays have length 1, so you can safely cast them to float with `.item()`.
+    """
+
+    metric_map = {
+        "Loudness_ISO532_1":                "N",
+        "Sharpness_DIN45692":               "S",
+        "Roughness_Daniel1997":             "R",
+        "FluctuationStrength_Osses2016":    "FS",
+        "Tonality_Aures1985":               "K",
+        "PsychoacousticAnnoyance_Di2016":   "PA",
+        "PsychoacousticAnnoyance_More2010": "PA",
+        "PsychoacousticAnnoyance_Zwicker1999": "PA",
+        "Loudness_ECMA418_2":               "N",
+        "Tonality_ECMA418_2":               "T",
+        "Roughness_ECMA418_2":              "R",
+    }
+
+    try:
+        prefix = metric_map[metric]
+    except KeyError as exc:
+        prefix = "X"
+        warnings.warn(
+            f"Unknown metric {metric!r}. Defaulting to 'X'.",
+            category=RuntimeWarning,   # or UserWarning
+            stacklevel=2               # show caller’s line number
+        )
+
+    x = np.asarray(data)
+    if x.ndim == 1:
+        x = x[:, None]
+    elif x.shape[1] > 3 and x.shape[0] <= 3:
+        x = x.T
+
+    if x.shape[1] > 3:
+        raise ValueError("Input has more than three channels.")
+
+    labels = [
+        "max", "min", "mean", "std",
+        "1", "2", "3", "4", "5",
+        "10", "20", "30", "40", "50",
+        "60", "70", "80", "90", "95",
+    ]
+
+    out = {}
+    for lbl in labels:
+        if lbl == "max":
+            val = np.max(x, axis=0)
+        elif lbl == "min":
+            val = np.min(x, axis=0)
+        elif lbl == "mean":
+            val = np.mean(x, axis=0)
+        elif lbl == "std":
+            val = np.std(x, axis=0, ddof=1)
+        elif lbl == "50":
+            val = np.median(x, axis=0)
+        else:
+            val = get_exceeded_value(x, int(lbl))
+
+        out[prefix + lbl] = val
+
+    return out
+
 # ----------------------------
 #### VALIDATION FUNCTIONS ####
 # ----------------------------
 if __name__ == "__main__":
 
-    #see("sound_files\ExStereo_TrainStation7-0100-0130.wav")
+    #see("sound_files\ExSignal_A320_auralized_departure_104dBFS.wav")
 
     # z = hz2bark(1000)
     # print(z)
     # f = bark2hz(z)
     # print(f)
 
-    output = get_statistics('sound_files\ExSignal_A320_auralized_departure_104dBFS.wav', 'Loudness_ISO532_1')
-    print(output)
+    # x = np.linspace(0, 10, 101)
+    # y = np.exp(-((x - 5)**2) / (2 * 2**2))  # same as gaussmf(x, [2, 5])
+    # p5 = get_exceeded_value(y, 5)
+    # p90 = get_exceeded_value(y, 90)
+    # print(p5,p90)
+    # plt.plot(x, y, label='Signal')
+    # plt.axhline(p5, color='r', linestyle='--', label='5% exceedance')
+    # plt.axhline(p90, color='g', linestyle='--', label='90% exceedance')
+    # plt.legend()
+    # plt.title("Exceedance Thresholds")
+    # plt.show()
+
+    # sr, input = wavfile.read('sound_files\ExSignal_A320_auralized_departure_104dBFS.wav')
+    # print(sr, input.shape)
+    # print(input)
+    # output = get_statistics(input, 'test')
+    # print(output)
