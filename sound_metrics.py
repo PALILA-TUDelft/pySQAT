@@ -15,6 +15,8 @@ from numpy.lib.stride_tricks import sliding_window_view
 #### MAIN FUNCTIONS ####
 # ----------------------
 
+__all__ = ["ob13_iso532_1", "gen_weighting_filters", "do_slm", "get_leq"]
+
 def ob13_iso532_1(
         insig: np.ndarray,
         fs: int | float,
