@@ -25,12 +25,6 @@ ArrayLike = Union[np.ndarray, float, int]
 #### MAIN FUNCTIONS ####
 # ----------------------
 
-__all__ = ["see", "hz2bark", "bark2hz", "phon2sone",
-           "sone2phon", "get_exceeded_value", "get_statistics",
-           "get_bark", "from_db", "create_a0_FIR", "calculate_a0",
-           "calibrate", "get_defaults", "shm_auditory_filt_bank",
-           "shm_basis_loudness","shm_noise_red_lowpass"]
-
 def see(file_path: str) -> None:
     """Visualise a WAV file (waveform + spectrogram) and play the audio.
 
