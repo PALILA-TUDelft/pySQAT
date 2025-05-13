@@ -64,7 +64,7 @@ def ob13_iso532_1(
         print("fmin < 25 Hz → clamped to 25 Hz")
         fmin = 25
     if fmax > 12_500:
-        print("fmax > 12 500 Hz → clamped to 12 500 Hz")
+        print("fmax > 12.500 Hz → clamped to 12.500 Hz")
         fmax = 12_500
     if insig.ndim != 1:
         raise ValueError("insig must be mono (1-D)")
@@ -89,9 +89,7 @@ def ob13_iso532_1(
     ar = np.array([[1,-2, 1],
                    [1,-2, 1],
                    [1,-2, 1]], dtype=float)
-
-    # ad  : (3, 3, 28)  coefficient offsets
-    # filtgain : (28,)  overall gains
+    
     ad = np.array([  # shape (3,3,28)
         [[ 0.000000e+00, -6.70260e-04,  6.59453e-04],
          [ 0.000000e+00, -3.75071e-04,  3.61926e-04],
@@ -179,7 +177,7 @@ def ob13_iso532_1(
          [ 0.000000e+00, -1.90231e+00,  1.47304e-01]], # 12.5 kHz
     ]).reshape(28, 3, 3).transpose(1, 2, 0)
 
-    filtgain = np.array([
+    filtgain = np.array([ # shape (28,)
         4.30764e-11, 8.59340e-11, 1.71424e-10, 3.41944e-10, 6.82035e-10,
         1.36026e-09, 2.71261e-09, 5.40870e-09, 1.07826e-08, 2.14910e-08,
         4.28228e-08, 8.54316e-08, 1.70009e-07, 3.38215e-07, 6.71990e-07,
@@ -189,24 +187,26 @@ def ob13_iso532_1(
     ], dtype=float)
 
     # 4) Nominal Centre Frequencies (28 ISO bands)
-    fc_all = 10.0 ** ((np.arange(28) - 16) / 10.0) * 1_000.0  # Hz
+    N_bands = 28
+    CenterFrequency = 10.0 ** ((np.arange(N_bands) - 16) / 10.0) * 1_000.0  # Hz
 
     # 5) Band Selection
-    keep = np.logical_and(fc_all >= fmin, fc_all <= fmax)
-    fc = fc_all[keep]
+    keep = np.logical_and(CenterFrequency >= fmin, CenterFrequency <= fmax)
     ad = ad[:, :, keep]
     filtgain = filtgain[keep]
-    nBands = len(fc)
+    N_bands = len(filtgain)
 
     # 6) Cascade Filtering
-    outsig = np.zeros((N, nBands), dtype=float)
+    outsig = np.zeros((N, N_bands), dtype=float)
 
-    for n in range(nBands):
+    for n in range(N_bands):
         # cascade the 3 biquads
         stage_1 = lfilter(br[0], ar[0] - ad[0, :, n], insig)
         stage_2 = lfilter(br[1], ar[1] - ad[1, :, n], stage_1)
         stage_3 = lfilter(br[2], ar[2] - ad[2, :, n], stage_2)
         outsig[:, n] = filtgain[n] * stage_3
+
+    fc = CenterFrequency[keep]
 
     return outsig, fc
 
@@ -247,58 +247,55 @@ def gen_weighting_filters(
     w5 = 995.88 # Source: Osses2010
 
     # 2) Select Analogue Prototype
-    wt = weighting.upper()
-    if wt == "A":
+    weightingType = weighting.upper()
+    if weightingType == "A":
         K = 7.3901e9
-        z = [0, 0, 0, 0]                                 # four zeros at DC
-        p = [-w1, -w1, -w2, -w3, -w4, -w4]               # six poles
+        zrs = [0, 0, 0, 0]
+        pls = [-w1, -w1, -w2, -w3, -w4, -w4]
 
-    elif wt == "B":
+    elif weightingType == "B":
         K = 5.9862e9
-        z = [0, 0, 0]
-        p = [-w1, -w1, -w5, -w4, -w4]
+        zrs = [0, 0, 0]
+        pls = [-w1, -w1, -w5, -w4, -w4]
 
-    elif wt == "C":
+    elif weightingType == "C":
         K = 5.9124e9
-        z = [0, 0]
-        p = [-w1, -w1, -w4, -w4]
+        zrs = [0, 0]
+        pls = [-w1, -w1, -w4, -w4]
 
-    elif wt == "D":
+    elif weightingType == "D":
         K = 91103.49
-        # one DC zero plus quadratic (complex-conjugate) zeros
-        z = [0] + np.roots([1, 6532, 4.0975e7]).tolist()
-        # two real poles + quadratic conjugate pole pair
-        p = [-1773.6, -7288.5] + np.roots([1, 21514, 3.8836e8]).tolist()
+        zrs = [0] + np.roots([1, 6532, 4.0975e7]).tolist()
+        pls = [-1773.6, -7288.5] + np.roots([1, 21514, 3.8836e8]).tolist()
 
-    elif wt == "R":
+    elif weightingType == "R":
         b = [1, -2, 1]
         a = [1, -1.99004745483398, 0.99007225036621]
         return b, a
 
-    elif wt == "Z":          # Step 2b – Trivial flat filter
+    elif weightingType == "Z":
         return np.array([1.0]), np.array([1.0])
 
-    else:                     # Step 2c – Bad argument
+    else:
         raise ValueError("weighting must be 'A', 'B', 'C', 'D' or 'Z'.")
 
     # 3) Bilinear Transform (Tustin) 
-    zd, pd, kd = bilinear_zpk(np.array(z), np.array(p), K, fs)
+    Zd, Pd, Kd = bilinear_zpk(np.array(zrs), np.array(pls), K, fs)
 
     # 4) Convert to Digital Filter Coefficients
-    b, a = zpk2tf(zd, pd, kd)
+    b, a = zpk2tf(Zd, Pd, Kd)
 
     # 5) Plotting (if requested)
     if plot:
             # Make the *upper* half of the FFT grid: N/2 points between 0-fs/2
             N = 16384
-            worN = N // 2
-            w, h = freqz(b, a, worN=worN, fs=fs)
+            w, H = freqz(b, a, N//2, fs=fs)
 
             plt.figure()
-            plt.semilogx(w, 20 * np.log10(np.abs(h)))
+            plt.semilogx(w, 20 * np.log10(np.abs(H)))
 
             # match the MATLAB axes and tick marks
-            plt.title(f"{wt}-weighting frequency response (fs = {fs:g} Hz)")
+            plt.title(f"{weightingType}-weighting frequency response (fs = {fs:g} Hz)")
             plt.xlabel("Frequency [Hz]")
             plt.ylabel("Magnitude [dB]")
             plt.grid(True, which="both")
@@ -349,30 +346,31 @@ def do_slm(
     dBFS : float
         Echo of the `dBFS` argument (handy for callers).
     """
+
     # 1) Ensure Mono Vector
     insig = np.asarray(insig, dtype=float).squeeze()
     if insig.ndim != 1:
         raise ValueError("Input signal must be a 1-D (mono) array")
 
     # 2) Get Frequency-weighting IIR
-    b_w, a_w = gen_weighting_filters(fs, weight_freq)
-    sig_w = lfilter(b_w, a_w, insig)
+    b, a = gen_weighting_filters(fs, weight_freq)
 
     # 3) Calibrate to Pascals
     dBoffset = 0.93
-    cal_coeff = 10 ** ((dBFS + dBoffset - 94) / 20.0)
-    sig_cal = cal_coeff * sig_w         # Pa
+    calCoeff = 10 ** ((dBFS + dBoffset - 94) / 20.0)
+    insig *= calCoeff        # Pa
 
     # 4) Apply IEC Time Integrator
-    sig_int = _integrator(sig_cal, fs, weight_time)
+    outsig = lfilter(b, a, insig)
+    outsig = _integrator(outsig, fs, weight_time)
 
     # 5) Convert to dB SPL & Clamp
-    outsig_dB = 20.0 * np.log10(np.abs(sig_int) / 2e-5)
+    outsig_dB = 20.0 * np.log10(np.abs(outsig) / 2e-5)
     outsig_dB = np.maximum(outsig_dB, 0.0)   # set < 0 dB to 0 dB
 
     # 6) Plotting (if requested)
     if plot:
-        leq = _leq(outsig_dB)
+        Leq = 10.0 * np.log10(np.mean(10 ** (outsig_dB / 10.0)))
         t = np.arange(len(outsig_dB)) / fs
         plt.figure()
         plt.plot(t, outsig_dB)
@@ -380,7 +378,7 @@ def do_slm(
         unit = "dB" if weight_freq.upper() == "Z" else f"dB({weight_freq.upper()})"
         plt.xlabel("Time [s]")
         plt.ylabel(f"Amplitude [{unit}]")
-        plt.title(f"Level • Leq = {leq:0.1f} {unit}")
+        plt.title(f"Level Leq = {Leq:0.1f} {unit}")
         plt.show()
 
     return outsig_dB, dBFS
@@ -473,10 +471,6 @@ def _integrator(insig: np.ndarray, fs: int | float, mode: str) -> np.ndarray:
     a = np.array([1.0, -e])          # denominator
     return lfilter(b, a, np.abs(insig))
 
-def _leq(level_dB: np.ndarray) -> float:
-    """Equivalent continuous SPL (Leq) of a dB vector."""
-    return 10.0 * np.log10(np.mean(10 ** (level_dB / 10.0)))
-
 # ----------------------------
 #### VALIDATION FUNCTIONS ####
 # ----------------------------
@@ -556,42 +550,42 @@ def _leq(level_dB: np.ndarray) -> float:
 #     print("First ten values:", np.round(leq_running[:10], 2))
 
 # test_Gen_weighting.m (Gen_weighting_filters.m)
-if __name__ == "__main__":
-    fs = 44_100                             # sampling rate
-    K  = fs // 2                            # ⇒ df ≈ 1 Hz below Nyquist
+# if __name__ == "__main__":
+#     fs = 44_100                             # sampling rate
+#     K  = fs // 2                            # ⇒ df ≈ 1 Hz below Nyquist
 
-    # 1) Generate All Filters
-    bA, aA = gen_weighting_filters(fs, "A")
-    bB, aB = gen_weighting_filters(fs, "B")
-    bC, aC = gen_weighting_filters(fs, "C")
-    bD, aD = gen_weighting_filters(fs, "D")
-    bR, aR = gen_weighting_filters(fs, "R")
+#     # 1) Generate All Filters
+#     bA, aA = gen_weighting_filters(fs, "A")
+#     bB, aB = gen_weighting_filters(fs, "B")
+#     bC, aC = gen_weighting_filters(fs, "C")
+#     bD, aD = gen_weighting_filters(fs, "D")
+#     bR, aR = gen_weighting_filters(fs, "R")
 
-    # 2 Frequency responses
-    f, hA = freqz(bA, aA, K, fs=fs)
-    _, hB  = freqz(bB, aB, K, fs=fs)
-    _, hC  = freqz(bC, aC, K, fs=fs)
-    _, hD  = freqz(bD, aD, K, fs=fs)
-    _, hR  = freqz(bR, aR, K, fs=fs)
+#     # 2 Frequency responses
+#     f, hA = freqz(bA, aA, K, fs=fs)
+#     _, hB  = freqz(bB, aB, K, fs=fs)
+#     _, hC  = freqz(bC, aC, K, fs=fs)
+#     _, hD  = freqz(bD, aD, K, fs=fs)
+#     _, hR  = freqz(bR, aR, K, fs=fs)
 
-    # 3 Plot
-    plt.figure()
-    plt.semilogx(f, 20 * np.log10(abs(hA)), "b", label="A")
-    plt.semilogx(f, 20 * np.log10(abs(hB)), "g", label="B")
-    plt.semilogx(f, 20 * np.log10(abs(hC)), "r", label="C")
-    plt.semilogx(f, 20 * np.log10(abs(hD)), "k", label="D")
-    plt.semilogx(f, 20 * np.log10(abs(hR)), "m", label="R")
+#     # 3 Plot
+#     plt.figure()
+#     plt.semilogx(f, 20 * np.log10(abs(hA)), "b", label="A")
+#     plt.semilogx(f, 20 * np.log10(abs(hB)), "g", label="B")
+#     plt.semilogx(f, 20 * np.log10(abs(hC)), "r", label="C")
+#     plt.semilogx(f, 20 * np.log10(abs(hD)), "k", label="D")
+#     plt.semilogx(f, 20 * np.log10(abs(hR)), "m", label="R")
 
-    plt.xlim(20, 20_000)
-    plt.grid(True, which="both")
-    plt.legend(loc="lower right")
-    plt.title("Frequency-weighting curves\n"
-              "(note that B and D are no longer standardised)")
-    xt = [32, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]
-    plt.xticks(xt, xt)
-    plt.xlabel("Frequency (Hz)")
-    plt.ylabel("Relative magnitude (dB)")
-    plt.ylim([-60, 20])
-    plt.show()
+#     plt.xlim(20, 20_000)
+#     plt.grid(True, which="both")
+#     plt.legend(loc="lower right")
+#     plt.title("Frequency-weighting curves\n"
+#               "(note that B and D are no longer standardised)")
+#     xt = [32, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]
+#     plt.xticks(xt, xt)
+#     plt.xlabel("Frequency (Hz)")
+#     plt.ylabel("Relative magnitude (dB)")
+#     plt.ylim([-60, 20])
+#     plt.show()
 
 
