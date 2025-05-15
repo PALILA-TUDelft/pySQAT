@@ -702,63 +702,61 @@ def shm_auditory_filt_bank(signal: np.ndarray, outplot: bool = False) -> np.ndar
         Filtered signal with one column per half-Bark band.
     """
 
-    # Argument validation
+    # Argument Validation
     signal = np.asarray(signal, dtype=float)
     if signal.ndim != 1:
         raise ValueError("signal must be a 1‑D (mono) array")
     if not np.isrealobj(signal):
         raise ValueError("signal must be real‑valued")
 
-    sample_rate: int = 48_000  # Hz
+    sampleRate48k = 48e3  # Hz
+    deltaFreq0 = 81.9289
+    c = 0.1618
 
-    # Constants (§ 5.1.4.1)
-    delta_freq0: float = 81.9289
-    c: float = 0.1618
+    halfBark = np.arange(0.5, 26.5 + 0.5, 0.5)  # 0.5 … 26.5 inclusive (53 bands)
+    bandCentreFreqs = (deltaFreq0 / c) * np.sinh(c * halfBark)
+    dfz = np.sqrt(deltaFreq0**2 + (c * bandCentreFreqs) ** 2)
 
-    half_bark = np.arange(0.5, 26.5 + 0.5, 0.5)  # 0.5 … 26.5 inclusive (53 bands)
-    band_centre_freqs = (delta_freq0 / c) * np.sinh(c * half_bark)
-    dfz = np.sqrt(delta_freq0**2 + (c * band_centre_freqs) ** 2)
-
-    k: int = 5  # filter order (footnote 5 ECMA‑418‑2)
+    # Signal Processing
+    k = 5  # filter order (footnote 5 ECMA‑418‑2)
     e_i = np.array([0, 1, 11, 11, 1], dtype=float)
-    out = np.empty((signal.size, half_bark.size), dtype=float)
+    signalFiltered = np.empty((signal.size, halfBark.size), dtype=float)
     if outplot:
         fig, (ax_mag, ax_phase) = plt.subplots(2, 1, sharex=True, figsize=(9, 6))
         ax_mag.set_xscale("log")
         ax_phase.set_xscale("log")
 
     # Main loop: highest → lowest band (to mimic MATLAB for reproducibility)
-    for z_idx in range(half_bark.size - 1, -1, -1):
+    for zBand in range(halfBark.size - 1, -1, -1):
         tau = (
             (1 / (2 ** (2 * k - 1)))
             * comb(2 * k - 2, k - 1)
-            * (1 / dfz[z_idx])
+            * (1 / dfz[zBand])
         )
-        d = np.exp(-1 / (sample_rate * tau))
+        d = np.exp(-1 / (sampleRate48k * tau))
 
         bp = np.exp(
             1j
             * 2
             * np.pi
-            * band_centre_freqs[z_idx]
+            * bandCentreFreqs[zBand]
             * np.arange(k + 2)
-            / sample_rate
+            / sampleRate48k
         )
 
-        m_fb = np.arange(1, k + 1)
-        a_m = np.concatenate(([1.0], (-d) ** m_fb * comb(k, m_fb))) * bp[: k + 1]
+        m = np.arange(1, k + 1)
+        a_m = np.concatenate(([1.0], (-d) ** m * comb(k, m))) * bp[: k + 1]
 
-        m_ff = np.arange(0, k)
-        denom = np.sum(e_i[1:] * d ** np.arange(1, k))
-        b_m = (((1 - d) ** k) / denom) * (d ** m_ff) * e_i[:k] * bp[:k]
+        m = np.arange(0, k)
+        b_m = (((1 - d) ** k) / np.sum(e_i[1:] * d ** np.arange(1, k))) * (d ** m) * e_i[:k] * bp[:k]
 
-        filtered = lfilter(b_m, a_m, signal)
-        out[:, z_idx] = 2.0 * np.real(filtered)
+        signalFiltered[:, zBand] = 2.0 * np.real(lfilter(b_m, a_m, signal))
         if outplot:
-            w, h = freqz(b_m, a_m, worN=10_000, fs=sample_rate, whole=True)
+            w, h = freqz(b_m, a_m, worN=10_000, fs=sampleRate48k, whole=True)
             ax_mag.semilogx(w, 20 * np.log10(np.abs(h)))
             ax_phase.semilogx(w, np.unwrap(np.angle(h)) * 180 / np.pi)
 
+    # Plot Figures
     if outplot:
         for ax in (ax_mag, ax_phase):
             ax.grid(True, which="both", ls=":")
@@ -785,8 +783,9 @@ def shm_auditory_filt_bank(signal: np.ndarray, outplot: bool = False) -> np.ndar
         ax_phase.set_xlabel("Frequency (Hz)")
         plt.tight_layout()
 
-    return out
+    return signalFiltered
 
+# cross-check compatibility checkpoint
 def shm_basis_loudness(
     signal_segmented: np.ndarray,
     band_centre_freq: float | None = None,
