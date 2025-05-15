@@ -96,7 +96,7 @@ def hz2bark(f: FloatArrayLike) -> np.ndarray:
     ndarray
         Bark values, same shape as *f*.
     """
-    f = np.asarray(f)  # Support scalar or array input
+    f = np.asarray(f)
     z = 13 * np.arctan(0.76 * (f / 1000)) + 3.5 * np.arctan((f / (1000 * 7.5))**2)
     return z
 
@@ -114,15 +114,15 @@ def bark2hz(z: FloatArrayLike) -> np.ndarray:
         Hertz values corresponding to *z*.
     """
     f0 = 1000
-    k = np.arange(-20, 13)  # Equivalent to MATLAB -20:12
+    k = np.arange(-20, 13)
     f = f0 * 2 ** (k / 3)
 
-    zt = hz2bark(f)  # Use your defined function
+    zt = hz2bark(f)
 
     interpolator = interp1d(zt, f, kind='linear', fill_value="extrapolate")
-    f_interp = interpolator(z)
+    f = interpolator(z)
 
-    return f_interp
+    return f
 
 def phon2sone(phon: FloatArrayLike) -> np.ndarray:
     """ISO 532‑1 mapping from **phon** to **sone**.
@@ -137,17 +137,15 @@ def phon2sone(phon: FloatArrayLike) -> np.ndarray:
     ndarray
         Loudness in sone.
     """
-    phon = np.asarray(phon).flatten()  # Ensure 1D array
-    phon = phon[:, np.newaxis]  # Convert to column vector [nTime, 1]
+    phon = np.asarray(phon).flatten()
+    phon = phon[:, np.newaxis]
     
     sone = np.zeros_like(phon)
 
     idx = phon >= 40
 
-    # Calculate sone values for phon >= 40
     sone[idx] = 2 ** (0.1 * (phon[idx] - 40))
 
-    # Calculate sone values for phon < 40
     sone[~idx] = (phon[~idx] / 40) ** (1 / 0.35)
 
     return sone
@@ -172,11 +170,11 @@ def sone2phon(sone: FloatArrayLike) -> np.ndarray:
 
     idx = sone >= 1
     phon[idx] = 40 + 33.22 * np.log10(sone[idx])
-    phon[~idx] = 40 * np.power(sone[~idx] + 0.0005, 0.35)
+    phon[~idx] = 40 * (sone[~idx] + 0.0005) ** 0.35
 
     return phon
 
-def get_exceeded_value(x: FloatArrayLike, percent: float) -> np.ndarray:
+def get_exceeded_value(input: FloatArrayLike, PercentValue: float) -> np.ndarray:
     """Return the value exceeded *percent* % of the time (per channel).
 
     Parameters
@@ -191,26 +189,25 @@ def get_exceeded_value(x: FloatArrayLike, percent: float) -> np.ndarray:
     ndarray
         Exceeded values for each channel.
     """
-    x = np.asarray(x)
+    input = np.asarray(input)
 
-    # Accept row-vector input and transpose so that time is axis-0
-    if x.ndim == 1:
-        x = x[:, None]
-    elif x.shape[1] > 3 and x.shape[0] <= 3:
-        x = x.T
+    if input.ndim == 1:
+        input = input[:, None]
+    elif input.shape[1] > 3 and input.shape[0] <= 3:
+        input = input.T
 
-    if x.shape[1] > 3:
+    if input.shape[1] > 3:
         raise ValueError("Input has more than three channels.")
 
-    n = x.shape[0]
-    idx = int(np.floor((100 - percent) / 100 * n))
-    idx = max(idx - 1, 0)  # shift to 0-based, ensure non-negative
+    n = input.shape[0]
+    X_index = int(np.floor((100 - PercentValue) / 100 * n))
+    X_index = max(X_index - 1, 0)
 
-    values = np.sort(x, axis=0)[idx, :]
+    sort_input = np.sort(input, axis=0)[X_index, :]
 
-    return values
+    return sort_input
 
-def get_statistics(data: FloatArrayLike, metric: str) -> Dict[str, np.ndarray]:
+def get_statistics(input: FloatArrayLike, metric: str) -> Dict[str, np.ndarray]:
     """Compute descriptive statistics for a psycho‑acoustic time‑series.
 
     Parameters
@@ -241,49 +238,49 @@ def get_statistics(data: FloatArrayLike, metric: str) -> Dict[str, np.ndarray]:
     }
 
     try:
-        prefix = metric_map[metric]
+        var_string = metric_map[metric]
     except KeyError as exc:
-        prefix = "X"
+        var_string = "X"
         warnings.warn(
             f"Unknown metric {metric!r}. Defaulting to 'X'.",
             category=RuntimeWarning,   # or UserWarning
             stacklevel=2               # show caller’s line number
         )
 
-    x = np.asarray(data)
-    if x.ndim == 1:
-        x = x[:, None]
-    elif x.shape[1] > 3 and x.shape[0] <= 3:
-        x = x.T
+    input = np.asarray(input)
+    if input.ndim == 1:
+        input = input[:, None]
+    elif input.shape[1] > 3 and input.shape[0] <= 3:
+        input = input.T
 
-    if x.shape[1] > 3:
+    if input.shape[1] > 3:
         raise ValueError("Input has more than three channels.")
 
-    labels = [
+    string_vector = [
         "max", "min", "mean", "std",
         "1", "2", "3", "4", "5",
         "10", "20", "30", "40", "50",
         "60", "70", "80", "90", "95",
     ]
 
-    out = {}
-    for lbl in labels:
-        if lbl == "max":
-            val = np.max(x, axis=0)
-        elif lbl == "min":
-            val = np.min(x, axis=0)
-        elif lbl == "mean":
-            val = np.mean(x, axis=0)
-        elif lbl == "std":
-            val = np.std(x, axis=0, ddof=1)
-        elif lbl == "50":
-            val = np.median(x, axis=0)
+    temp_varName = {}
+    for k in string_vector:
+        if k == "max":
+            temp_val = np.max(input, axis=0)
+        elif k == "min":
+            temp_val = np.min(input, axis=0)
+        elif k == "mean":
+            temp_val = np.mean(input, axis=0)
+        elif k == "std":
+            temp_val = np.std(input, axis=0, ddof=1)
+        elif k == "50":
+            temp_val = np.median(input, axis=0)
         else:
-            val = get_exceeded_value(x, int(lbl))
+            temp_val = get_exceeded_value(input, int(k))
 
-        out[prefix + lbl] = val
+        temp_varName[var_string + k] = temp_val
 
-    return out
+    return temp_varName
 
 def get_bark(N: int, qb: ArrayLikeInt, freqs: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     """Convert FFT‑bin frequencies to Bark numbers.
@@ -344,7 +341,7 @@ def get_bark(N: int, qb: ArrayLikeInt, freqs: np.ndarray) -> Tuple[np.ndarray, n
 
     return bark, Bark_raw
 
-def from_db(gain_db: FloatArrayLike, divisor: float = 20.0) -> np.ndarray:
+def from_db(gain_dB: FloatArrayLike, divisor: float = 20.0) -> np.ndarray:
     """Convert decibel magnitude to linear gain.
 
     Parameters
@@ -359,9 +356,9 @@ def from_db(gain_db: FloatArrayLike, divisor: float = 20.0) -> np.ndarray:
     ndarray
         Linear‑gain values.
     """
-    gain_db = np.asarray(gain_db, dtype=float)
-    out = 10.0 ** (gain_db / divisor)
-    return out
+    gain_dB = np.asarray(gain_dB, dtype=float)
+    gain = 10.0 ** (gain_dB / divisor)
+    return gain
 
 def create_a0_FIR(
     f: np.ndarray,
@@ -406,10 +403,10 @@ def create_a0_FIR(
     if f[-1] >= fs / 2:
         raise ValueError("All break-point frequencies must be below fs/2.")
 
-    f_ext  = np.hstack(([0.0],  f,  [fs / 2.0]))
-    a0_ext = np.hstack(([a0[0]], a0, [a0[-1]]))
+    f  = np.hstack(([0.0],  f,  [fs / 2.0]))
+    a0 = np.hstack(([a0[0]], a0, [a0[-1]]))
 
-    B = firwin2(numtaps=N + 1, freq=f_ext, gain=a0_ext, fs=fs)
+    B = firwin2(numtaps=N + 1, freq=f, gain=a0, fs=fs)
 
     if plot:
         w, h = freqz(B, worN=N // 2, fs=fs)
@@ -456,7 +453,7 @@ def calculate_a0(
         Linear magnitude reference at ``freqs``.
     """
 
-    # 1) frequency grid   (20 Hz – 20 kHz, positive FFT bins only)
+    # 1) Frequency Grid
     df     = fs / N
     k_min  = int(round(20.0    / df))
     k_max  = int(round(20_000.0 / df))
@@ -464,58 +461,81 @@ def calculate_a0(
     qb     = np.arange(k_min, k_max + 1)
     freqs  = qb * df
 
-    # 2) Bark scale
+    # 2) Bark Scale
     bark, _ = get_bark(N, qb, freqs)
 
-    # 3) choose breakpoint table  (Bark, dB)
+    # 3) Choose Breakpoint Table
     a0_type = a0_type.lower()
     if a0_type == 'fastl2007':
         a0tab = np.array([
-            [0,    0], [10,  0], [12,  1.15], [13,  2.31], [14,  3.85],
-            [15,  5.62], [16,  6.92], [16.5, 7.38], [17,  6.92], [18, 4.23],
-            [18.5, 2.31], [19, 0], [20, -1.43], [21, -2.59], [21.5, -3.57],
-            [22, -5.19], [22.5, -7.41], [23, -11.3], [23.5, -20],
-            [24, -40], [25, -130], [26, -999]
+            [0,    0],
+            [10,  0],
+            [12,  1.15],
+            [13,  2.31],
+            [14,  3.85],
+            [15,  5.62],
+            [16,  6.92],
+            [16.5, 7.38],
+            [17,  6.92],
+            [18, 4.23],
+            [18.5, 2.31],
+            [19, 0],
+            [20, -1.43],
+            [21, -2.59],
+            [21.5, -3.57],
+            [22, -5.19],
+            [22.5, -7.41],
+            [23, -11.3],
+            [23.5, -20],
+            [24, -40],
+            [25, -130],
+            [26, -999]
         ], dtype=float)
     elif a0_type == 'fluctuationstrength_osses2016':
         a0tab = np.array([
-            [0, 0], [10, 0], [19, 0], [20, -1.43], [21, -2.59],
-            [21.5, -3.57], [22, -5.19], [22.5, -7.41], [23, -11.3],
-            [23.5, -20], [24, -40], [25, -130], [26, -999]
+            [0, 0],
+            [10, 0],
+            [19, 0],
+            [20, -1.43],
+            [21, -2.59],
+            [21.5, -3.57],
+            [22, -5.19],
+            [22.5, -7.41],
+            [23, -11.3],
+            [23.5, -20],
+            [24, -40],
+            [25, -130],
+            [26, -999]
         ], dtype=float)
     else:
         raise ValueError("a0_type must be 'fastl2007' or 'fluctuationstrength_osses2016'")
 
-    # 4) interpolate → dB → linear
-    a0_lin_full = np.zeros(int(round(N/2 + 1)))
-    db_interp   = np.interp(bark[qb], a0tab[:, 0], a0tab[:, 1], left=np.nan, right=np.nan)
-    a0_lin_full[qb] = from_db(db_interp)
-    a0_lin_full[np.isnan(a0_lin_full)] = 0.0
+    # 4) Interpolate
+    a0 = np.zeros(int(round(N/2 + 1)))
+    a0[qb] = from_db(np.interp(bark[qb], a0tab[:, 0], a0tab[:, 1], left=np.nan, right=np.nan))
+    a0[np.isnan(a0)] = 0.0
 
-    a0_lin = a0_lin_full[qb]     # slice actually used
+    B = create_a0_FIR(freqs, a0[qb], N, fs, plot=plot)
 
-    # 5) design FIR (or plot only)
-    B = create_a0_FIR(freqs, a0_lin, N, fs, plot=plot)
-
-    return B, freqs, a0_lin
+    return B, freqs, a0[qb]
 
 def calibrate(
-    input_signal: np.ndarray,
-    ref_signal: np.ndarray,
-    reference_level: float,
+    InputSignal: np.ndarray,
+    RefSignal: np.ndarray,
+    ReferenceLevel: float,
     *,
     return_dbfs: bool = False
 ) -> Tuple[np.ndarray, float, Optional[float]]:
-    """Scale *input_signal* to a known SPL reference.
+    """Scale *InputSignal* to a known SPL reference.
 
     Parameters
     ----------
-    input_signal : ndarray
+    InputSignal : ndarray
         Signal to be calibrated.
-    ref_signal : ndarray
+    RefSignal : ndarray
         Reference recording at known level.
-    reference_level : float
-        SPL of ``ref_signal`` in dB (rms).
+    ReferenceLevel : float
+        SPL of ``RefSignal`` in dB (rms).
     return_dbfs : bool, default False
         If ``True`` also return the SPL equivalent of 0 dBFS.
 
@@ -526,24 +546,17 @@ def calibrate(
     dBFS : float, optional
     """
     # Ensure floating-point math
-    input_signal = np.asarray(input_signal, dtype=float)
-    ref_signal = np.asarray(ref_signal, dtype=float)
+    InputSignal = np.asarray(InputSignal, dtype=float)
+    RefSignal = np.asarray(RefSignal, dtype=float)
 
-    # --- 1. Calibration factor -----------------------------------------------
-    #     CalFactor = √(10^(L_ref/10) * 4e-10 / mean(ref_signal²))
-    mean_sq_ref = np.mean(ref_signal ** 2)
-    cal_factor = np.sqrt((10.0 ** (reference_level / 10.0)) * 4e-10 / mean_sq_ref)
+    CalFactor = np.sqrt((10.0 ** (ReferenceLevel / 10.0)) * 4e-10 / np.mean(RefSignal ** 2))
+    CalibratedSignal = CalFactor * InputSignal
 
-    # --- 2. Apply scaling ------------------------------------------------------
-    calibrated_signal = cal_factor * input_signal
-
-    # --- 3. Optional dBFS ------------------------------------------------------
     if return_dbfs:
-        rms_ref = np.sqrt(mean_sq_ref)
-        dbfs = reference_level - 20.0 * np.log10(rms_ref)
-        return calibrated_signal, cal_factor, dbfs
+        dbfs = ReferenceLevel - 20.0 * np.log10(np.sqrt(np.mean(RefSignal ** 2)))
+        return CalibratedSignal, CalFactor, dbfs
 
-    return calibrated_signal, cal_factor
+    return CalibratedSignal, CalFactor
 
 def get_defaults(model_name: str) -> Dict[str, Any]:
     """Return default‑parameter dictionary for a psycho‑acoustic model.

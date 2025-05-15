@@ -2,6 +2,7 @@
 __pycache__/
 *.py[cod]
 playground/
+temp_trash/
 
 # C extensions
 *.so
