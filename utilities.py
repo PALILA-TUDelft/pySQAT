@@ -785,10 +785,10 @@ def shm_auditory_filt_bank(signal: np.ndarray, outplot: bool = False) -> np.ndar
 
     return signalFiltered
 
-# cross-check compatibility checkpoint
+# cross-check compatibility readability checkpoint
 def shm_basis_loudness(
-    signal_segmented: np.ndarray,
-    band_centre_freq: float | None = None,
+    signalSegmented: np.ndarray,
+    bandCentreFreqs: float | None = None,
     tol: float = 1.0
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
@@ -796,12 +796,12 @@ def shm_basis_loudness(
 
     Parameters
     ----------
-    signal_segmented : ndarray of float, shape (n_samples, n_blocks[, n_bands])
+    signalSegmented : ndarray of float, shape (n_samples, n_blocks[, n_bands])
         Segmented pressure signal. Must be real-valued.
-    band_centre_freq : float, optional
+    bandCentreFreqs : float, optional
         Centre frequency in Hz when input is 2-D (single band). Omit for 3-D input.
     tol : float, default 1.0
-        Frequency tolerance in Hz for matching band_centre_freq to standard half-Bark centres.
+        Frequency tolerance in Hz for matching bandCentreFreqs to standard half-Bark centres.
 
     Returns
     -------
@@ -814,20 +814,19 @@ def shm_basis_loudness(
     """
 
     # Constants
-    DELTA_F0 = 81.9289
-    C = 0.1618
-    half_bark = np.arange(0.5, 26.5 + 0.0001, 0.5)  # 0.5 … 26.5 inclusive
-    band_centres = (DELTA_F0 / C) * np.sinh(C * half_bark)  # Eq. 9
+    deltaFreq0 = 81.9289
+    c = 0.1618
+    halfBark = np.arange(0.5, 27, 0.5)  # 0.5 … 26.5 inclusive
+    bandCentreFreqs = (deltaFreq0 / c) * np.sinh(c * halfBark)  # Eq. 9
 
-    CAL_N = 0.0211668
-    CAL_NX = 1.00132
-    ALPHA = 1.5  # a in Eq. 23
+    cal_N = 0.0211668
+    cal_Nx = 1.00132
+    a = 1.5  # a in Eq. 23
 
     p_threshold = 2e-5 * 10 ** (np.arange(15, 86, 10) / 20)  # Pa (8‑vals)
     v = np.array([1, 0.6602, 0.0864, 0.6384, 0.0328, 0.4068, 0.2082, 0.3994, 0.6434])
-    diff_v_over_a = np.diff(v) / ALPHA  # shape (8,)
 
-    ltqz = np.array([
+    LTQz = np.array([
         0.3310, 0.1625, 0.1051, 0.0757, 0.0576, 0.0453, 0.0365, 0.0298,
         0.0247, 0.0207, 0.0176, 0.0151, 0.0131, 0.0115, 0.0103, 0.0093,
         0.0086, 0.0081, 0.0077, 0.0074, 0.0073, 0.0072, 0.0071, 0.0072,
@@ -838,52 +837,49 @@ def shm_basis_loudness(
     ])
 
     # Validation
-    if not np.isrealobj(signal_segmented):
+    if not np.isrealobj(signalSegmented):
         raise TypeError("signal_segmented must be real‑valued")
 
-    if signal_segmented.ndim not in (2, 3):
+    if signalSegmented.ndim not in (2, 3):
         raise ValueError("signal_segmented must be 2‑D or 3‑D")
 
-    if band_centre_freq is None and signal_segmented.ndim == 2:
-        raise ValueError("band_centre_freq required for 2‑D input")
+    if bandCentreFreqs is None and signalSegmented.ndim == 2:
+        raise ValueError("bandCentreFreqs required for 2‑D input")
 
-    if band_centre_freq is not None and signal_segmented.ndim == 3:
-        raise ValueError("band_centre_freq should be omitted for 3‑D input")
+    if bandCentreFreqs is not None and signalSegmented.ndim == 3:
+        raise ValueError("bandCentreFreqs should be omitted for 3‑D input")
 
     # Centre‑frequency handling
-    if band_centre_freq is not None:
-        idx = int(np.abs(band_centres - band_centre_freq).argmin())
-        if abs(band_centres[idx] - band_centre_freq) > tol:
+    if bandCentreFreqs is not None:
+        idx = int(np.abs(bandCentreFreqs - bandCentreFreqs).argmin())
+        if abs(bandCentreFreqs[idx] - bandCentreFreqs) > tol:
             raise ValueError(
-                f"{band_centre_freq} Hz is not within ±{tol} Hz of any standard half‑Bark centre; "
-                f"closest is {band_centres[idx]:.2f} Hz.")
+                f"{bandCentreFreqs} Hz is not within ±{tol} Hz of any standard half‑Bark centre; "
+                f"closest is {bandCentreFreqs[idx]:.2f} Hz.")
 
     ## Core processing ##
-    signal_rect_seg = np.maximum(signal_segmented, 0.0)
+    # Half Wave Rectification
+    signalRectSeg = np.maximum(signalSegmented, 0.0)
 
     # Block RMS (Eq. 22) – factor 2 because rectified signal is positive‑only
-    n_samples = signal_rect_seg.shape[0]
-    block_rms = np.sqrt((2.0 / n_samples) * np.sum(signal_rect_seg ** 2, axis=0))
+    blockRMS = np.sqrt((2.0 / signalRectSeg.shape[0]) * np.sum(signalRectSeg ** 2, axis=0))
 
     # Loudness transform (Eqs. 23–24)
-    term = (1 + (block_rms[..., None] / p_threshold) ** ALPHA) ** diff_v_over_a
-    band_loudness = CAL_N * CAL_NX * (block_rms / 20e-6) * np.prod(term, axis=-1)
+    bandLoudness = cal_N * cal_Nx * (blockRMS / 20e-6) * np.prod((1 + (blockRMS[..., None] / p_threshold) ** a) ** (np.diff(v) / a), axis=-1)
+
+    blockRMS = np.squeeze(blockRMS)
 
     # Threshold‑in‑quiet correction (Eq. 25)
-    if band_centre_freq is not None:  # 2‑D input, single band
-        basis_loudness = band_loudness - ltqz[idx]
+    if bandCentreFreqs is not None:  # 2‑D input, single band
+        basisLoudness = bandLoudness - LTQz[idx]
     else:                             # 3‑D input, all 53 bands
-        ltqz_reshaped = ltqz.reshape((1,) * (block_rms.ndim - 1) + (53,))
-        basis_loudness = band_loudness - ltqz_reshaped
+        basisLoudness = bandLoudness - LTQz.reshape((1,) * (blockRMS.ndim - 1) + (53,))
 
-    basis_loudness = np.maximum(basis_loudness, 0.0)
+    basisLoudness = np.maximum(basisLoudness, 0.0)
 
-    # Squeeze singleton dims in RMS for MATLAB‑like behaviour
-    block_rms = np.squeeze(block_rms)
+    return signalRectSeg, basisLoudness, blockRMS
 
-    return signal_rect_seg, basis_loudness, block_rms
-
-def shm_noise_red_lowpass(signal: np.ndarray, fs: float) -> np.ndarray:
+def shm_noise_red_lowpass(signal: np.ndarray, sampleRatein: float) -> np.ndarray:
     """
     Apply a low-pass noise-reduction filter (ECMA-418-2).
 
@@ -891,7 +887,7 @@ def shm_noise_red_lowpass(signal: np.ndarray, fs: float) -> np.ndarray:
     ----------
     signal : ndarray of float, shape (N,) or (N, C)
         Input audio samples (time × channels).
-    fs : float
+    sampleRatein : float
         Sampling rate in Hz.
 
     Returns
@@ -910,26 +906,23 @@ def shm_noise_red_lowpass(signal: np.ndarray, fs: float) -> np.ndarray:
     if not np.isrealobj(signal):
         raise ValueError("`signal` must contain real‑valued samples")
 
-    if not (isinstance(fs, (float, int)) and fs > 0):
-        raise ValueError("`fs` must be a positive scalar sample‑rate (Hz)")
+    if not (isinstance(sampleRatein, (float, int)) and sampleRatein > 0):
+        raise ValueError("`sampleRatein` must be a positive scalar sample‑rate (Hz)")
 
     # Coefficient design (ECMA‑418‑2:2024, Equations 14‑15)
     k = 3
     e_i = np.array([0.0, 1.0, 1.0])          # Footnote 21
     tau = (1 / 32) * (6 / 7)                 # Footnote 20
-    d = np.exp(-1.0 / (fs * tau))            # §5.1.4.2
+    d = np.exp(-1.0 / (sampleRatein * tau))            # §5.1.4.2
 
     # Denominator (a): Equation 14
     m = np.arange(1, k + 1)
-    nck = np.array([3, 3, 1], dtype=float)   # nchoosek(3,m) for m = 1‥3
-    a = np.concatenate(([1.0], ((-d) ** m) * nck))
+    a = np.concatenate(([1.0], ((-d) ** m) * np.array([3, 3, 1], dtype=float)))
 
     # Numerator (b): Equation 15
     m = np.arange(0, k)          # 0‥k‑1
     i = np.arange(1, k)          # 1‥k‑1
-    denom = np.sum(e_i[i] * (d ** i))
-    gain = ((1 - d) ** k) / denom
-    b = gain * (d ** m) * e_i     # note e_i[0] == 0 → b[0] == 0
+    b = (((1 - d) ** k) / (np.sum(e_i[i] * (d ** i)))) * (d ** m) * e_i     # note e_i[0] == 0 → b[0] == 0
 
     # Filtering
     was_1d = (signal.ndim == 1)
@@ -983,7 +976,7 @@ def shm_out_mid_ear_filter(
 
 
     # ECMA‑418‑2 biquad coefficients
-    b0 = np.array([
+    b_0k = np.array([
         1.015896020255593,
         0.958943219304445,
         0.961371976333197,
@@ -993,7 +986,7 @@ def shm_out_mid_ear_filter(
         0.988029297230954,
         1.952237687301361,
     ])
-    b1 = np.array([
+    b_1k = np.array([
         -1.925298877776079,
         -1.806088011849494,
         -1.763632154338248,
@@ -1003,7 +996,7 @@ def shm_out_mid_ear_filter(
         -1.912433802933870,
         0.162319983017519,
     ])
-    b2 = np.array([
+    b_2k = np.array([
         0.922118060364679,
         0.876438777856084,
         0.821787991845146,
@@ -1013,8 +1006,8 @@ def shm_out_mid_ear_filter(
         0.926131550180785,
         -0.667994113035186,
     ])
-    a0 = np.ones_like(b0)
-    a1 = np.array([
+    a_0k = np.ones_like(b_0k)
+    a_1k = np.array([
         -1.925298877776079,
         -1.806088011849494,
         -1.763632154338248,
@@ -1024,7 +1017,7 @@ def shm_out_mid_ear_filter(
         -1.912433802933871,
         0.162319983017519,
     ])
-    a2 = np.array([
+    a_2k = np.array([
         0.938014080620272,
         0.835381997160530,
         0.783159968178343,
@@ -1040,14 +1033,14 @@ def shm_out_mid_ear_filter(
     else:  # 'diffuse'
         idx = slice(2, None)  # omit first two (free‑field) stages
 
-    sos = np.column_stack([b0[idx], b1[idx], b2[idx], a0[idx], a1[idx], a2[idx]])
+    sos = np.column_stack([b_0k[idx], b_1k[idx], b_2k[idx], a_0k[idx], a_1k[idx], a_2k[idx]])
 
 
     # Filtering (axis 0 = time)
-    filtered = sosfilt(sos, signal, axis=0)
+    signalFiltered = sosfilt(sos, signal, axis=0)
 
     if signal_was_1d:
-        filtered = filtered.ravel()
+        signalFiltered = signalFiltered.ravel()
 
     # Plotting (optional)
     if outplot:
@@ -1069,14 +1062,14 @@ def shm_out_mid_ear_filter(
 
         plt.show()
 
-    return filtered
+    return signalFiltered
 
 def shm_preproc(
     signal: np.ndarray,
-    block_size: int,
-    hop_size: int,
-    pad_start: bool = True,
-    pad_end: bool = True
+    blockSize: int,
+    hopSize: int,
+    padStart: bool = True,
+    padEnd: bool = True
 ) -> np.ndarray:
     """
     Pre-process signal with raised-cosine fade-in and zero-padding (ECMA-418-2).
@@ -1107,56 +1100,56 @@ def shm_preproc(
 
     if sig.ndim != 2:
         raise ValueError("`signal` must be 1-D or 2-D (time x channels).")
-    if block_size <= 0 or hop_size <= 0:
-        raise ValueError("`block_size` and `hop_size` must be positive integers.")
+    if blockSize <= 0 or hopSize <= 0:
+        raise ValueError("`blockSize` and `hopSize` must be positive integers.")
 
     n_ch = sig.shape[1]
 
     # Fade-in
-    fade = 0.5 - 0.5 * np.cos(np.pi * np.arange(240) / 240)
-    fade = fade[:, None]
-    sig_fade = np.vstack((fade * sig[:240, :], sig[240:, :]))
+    fadeWeight = 0.5 - 0.5 * np.cos(np.pi * np.arange(240) / 240)
+    fadeWeight = fadeWeight[:, None]
+    signalFade = np.vstack((fadeWeight * sig[:240, :], sig[240:, :]))
 
     # Padding
-    n_zeros_s = block_size if pad_start else 0
+    n_zeross = blockSize if padStart else 0
 
-    if pad_end:
+    if padEnd:
         n_samples = sig.shape[0]
-        n_new = hop_size * (int(np.ceil((n_samples + hop_size + n_zeros_s)
-                                        / hop_size)) - 1)
-        n_zeros_e = n_new - n_samples
+        n_new = hopSize * (int(np.ceil((n_samples + hopSize + n_zeross)
+                                        / hopSize)) - 1)
+        n_zerose = n_new - n_samples
     else:
-        n_zeros_e = 0
+        n_zerose = 0
 
     # Assemble
-    out = np.vstack((
-        np.zeros((n_zeros_s, n_ch)),
-        sig_fade,
-        np.zeros((n_zeros_e, n_ch))
+    signalOut = np.vstack((
+        np.zeros((n_zeross, n_ch)),
+        signalFade,
+        np.zeros((n_zerose, n_ch))
     ))
 
     # Restore
     if isinstance(signal, (list, np.ndarray)) and np.ndim(signal) == 1:
-        out = out[:, 0]
+        signalOut = signalOut[:, 0]
 
-    return out
+    return signalOut
 
-def shm_resample(signal: np.ndarray, sample_rate_in: int) -> tuple[np.ndarray, int]:
+def shm_resample(signal: np.ndarray, sampleRatein: int) -> tuple[np.ndarray, int]:
     """
     Resample a signal to 48 kHz (ECMA-418-2 target rate).
 
     Parameters
     ----------
     signal : ndarray of float, shape (N,) or (N, C)
-        Input signal at sample_rate_in.
-    sample_rate_in : int
+        Input signal at sampleRatein.
+    sampleRatein : int
         Original sampling rate in Hz.
 
     Returns
     -------
-    resampled_signal : ndarray of float
+    resampledSignal : ndarray of float
         Signal resampled to 48 kHz.
-    resampled_rate : int
+    resampledRate : int
         Always 48000.
     """
 
@@ -1167,40 +1160,39 @@ def shm_resample(signal: np.ndarray, sample_rate_in: int) -> tuple[np.ndarray, i
         raise TypeError("signal must contain real numbers")
     if signal.ndim > 2:
         raise ValueError("signal must be 1-D or 2-D (time[, channels])")
-    if not isinstance(sample_rate_in, int) or sample_rate_in <= 0:
-        raise ValueError("sample_rate_in must be a positive integer")
+    if not isinstance(sampleRatein, int) or sampleRatein <= 0:
+        raise ValueError("sampleRatein must be a positive integer")
 
-    TARGET_RATE = 48_000
+    resampledRate = 48_000
 
-    if sample_rate_in == TARGET_RATE:
-        return signal, TARGET_RATE
+    if sampleRatein == resampledRate:
+        return signal, resampledRate
 
     # Compute Resampling
-    g = np.gcd(TARGET_RATE, sample_rate_in)
-    up = TARGET_RATE // g
-    down = sample_rate_in // g
-    resampled_signal = resample_poly(signal, up, down, axis=0)
+    up = resampledRate // np.gcd(resampledRate, sampleRatein)
+    down = sampleRatein // np.gcd(resampledRate, sampleRatein)
+    resampledSignal = resample_poly(signal, up, down, axis=0)
 
-    return resampled_signal, TARGET_RATE
+    return resampledSignal, resampledRate
 
 def shm_rough_low_pass(
-    spec_rough_est_tform: np.ndarray,
-    sample_rate: float,
-    rise_time: float,
-    fall_time: float
+    specRoughEstTform: np.ndarray,
+    sampleRate: float,
+    riseTime: float,
+    fallTime: float
 ) -> np.ndarray:
     """
     Smooth specific roughness estimates with a low-pass IIR filter (ECMA-418-2).
 
     Parameters
     ----------
-    spec_rough_est_tform : ndarray, shape (T, B)
+    specRoughEstTform : ndarray, shape (T, B)
         Specific-roughness estimates (time × bands).
-    sample_rate : float
+    sampleRate : float
         Frame rate of the input in Hz.
-    rise_time : float
+    riseTime : float
         Attack time constant in seconds.
-    fall_time : float
+    fallTime : float
         Release time constant in seconds.
 
     Returns
@@ -1210,80 +1202,75 @@ def shm_rough_low_pass(
     """
 
     # Validation
-    spec_rough_est_tform = np.asanyarray(spec_rough_est_tform, dtype=float)
-    if spec_rough_est_tform.ndim != 2:
-        raise ValueError("spec_rough_est_tform must be a 2-D array (time × bands)")
-    if sample_rate <= 0 or rise_time <= 0 or fall_time <= 0:
-        raise ValueError("sample_rate, rise_time and fall_time must be positive")
+    specRoughEstTform = np.asanyarray(specRoughEstTform, dtype=float)
+    if specRoughEstTform.ndim != 2:
+        raise ValueError("specRoughEstTform must be a 2-D array (time × bands)")
+    if sampleRate <= 0 or riseTime <= 0 or fallTime <= 0:
+        raise ValueError("sampleRate, riseTime and fallTime must be positive")
 
     # IIR coefficients
-    rise_exp = np.exp(-1.0 / (sample_rate * rise_time))
-    fall_exp = np.exp(-1.0 / (sample_rate * fall_time))
+    riseExponent = np.exp(-1.0 / (sampleRate * riseTime))
+    fallExponent = np.exp(-1.0 / (sampleRate * fallTime))
 
     # Filtering
-    spec_roughness = np.empty_like(spec_rough_est_tform)
-    spec_roughness[0, :] = spec_rough_est_tform[0, :]
+    specRoughness = np.empty_like(specRoughEstTform)
+    specRoughness[0, :] = specRoughEstTform[0, :]
 
-    for t in range(1, spec_rough_est_tform.shape[0]):
-        rise_mask = spec_rough_est_tform[t, :] >= spec_roughness[t - 1, :]
-        fall_mask = ~rise_mask
+    for llBlock in range(1, specRoughEstTform.shape[0]):
+        riseMask = specRoughEstTform[llBlock, :] >= specRoughness[llBlock - 1, :]
+        fallMask = ~riseMask
 
-        if np.any(rise_mask):
-            spec_roughness[t, rise_mask] = (
-                spec_rough_est_tform[t, rise_mask] * (1.0 - rise_exp)
-                + spec_roughness[t - 1, rise_mask] * rise_exp
+        if np.any(riseMask):
+            specRoughness[llBlock, riseMask] = (
+                specRoughEstTform[llBlock, riseMask] * (1.0 - riseExponent)
+                + specRoughness[llBlock - 1, riseMask] * riseExponent
             )
 
-        if np.any(fall_mask):
-            spec_roughness[t, fall_mask] = (
-                spec_rough_est_tform[t, fall_mask] * (1.0 - fall_exp)
-                + spec_roughness[t - 1, fall_mask] * fall_exp
+        if np.any(fallMask):
+            specRoughness[llBlock, fallMask] = (
+                specRoughEstTform[llBlock, fallMask] * (1.0 - fallExponent)
+                + specRoughness[llBlock - 1, fallMask] * fallExponent
             )
 
-    return spec_roughness
+    return specRoughness
 
 def shm_rough_weight(
-    mod_rate: np.ndarray,
-    modfreq_max_weight: np.ndarray,
-    rough_weight_params: np.ndarray
+    modRate: np.ndarray,
+    modfreqMaxWeight: np.ndarray,
+    roughWeightParams: np.ndarray
 ) -> np.ndarray:
     """
     Compute roughness weighting factors (ECMA-418-2, Eq. 85).
 
     Parameters
     ----------
-    mod_rate : array_like of float
+    modRate : array_like of float
         Modulation rates in Hz.
-    modfreq_max_weight : array_like of float
+    modfreqMaxWeight : array_like of float
         Modulation rate at which the weight peaks (value=1).
-    rough_weight_params : array_like of float, shape (2, ...)
+    roughWeightParams : array_like of float, shape (2, ...)
         Weighting parameters: [alpha (gain), beta (sharpness)].
 
     Returns
     -------
-    rough_weight : ndarray
+    roughWeight : ndarray
         Weighting factors, same shape as broadcasted inputs.
     """
 
-    mod_rate = np.asarray(mod_rate, dtype=float)
-    modfreq_max_weight = np.asarray(modfreq_max_weight, dtype=float)
-    rough_weight_params = np.asarray(rough_weight_params, dtype=float)
+    modRate = np.asarray(modRate, dtype=float)
+    modfreqMaxWeight = np.asarray(modfreqMaxWeight, dtype=float)
+    roughWeightParams = np.asarray(roughWeightParams, dtype=float)
 
-    alpha = rough_weight_params[0]  # first “page” (α parameters)
-    beta = rough_weight_params[1]   # second “page” (β parameters)
-
-    term = (mod_rate / modfreq_max_weight) - (modfreq_max_weight / mod_rate)
-    inner = (term * alpha) ** 2
-    rough_weight = 1.0 / (1.0 + inner) ** beta
-    return rough_weight
+    roughWeight = 1.0 /(1.0 + ((((modRate / modfreqMaxWeight) - (modfreqMaxWeight / modRate)) * roughWeightParams[0]) ** 2)) ** roughWeightParams[1]
+    return roughWeight
 
 def shm_signal_segment(
     signal: np.ndarray,
     axisn: int = 0,
-    block_size: int = 1024,
+    blockSize: int = 1024,
     overlap: float = 0.0,
     i_start: int = 0,
-    end_shrink: bool = False,
+    endShrink: bool = False,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Segment a signal into overlapping blocks (ECMA-418-2).
@@ -1294,19 +1281,19 @@ def shm_signal_segment(
         Input samples and optional channels.
     axisn : {0, 1}, default 0
         Axis along which to segment. Axis 1 input is transposed internally.
-    block_size : int, default 1024
+    blockSize : int, default 1024
         Number of samples per block.
     overlap : float, default 0.0
         Fractional overlap between successive blocks (0 ≤ overlap < 1).
     i_start : int, default 0
         Starting index for the first block.
-    end_shrink : bool, default False
+    endShrink : bool, default False
         If True, include a final block capturing the signal tail.
 
     Returns
     -------
     signal_segmented : ndarray
-        Segmented signal, shape (block_size, n_blocks, n_channels) or transposed if axisn==1.
+        Segmented signal, shape (blockSize, n_blocks, n_channels) or transposed if axisn==1.
     i_blocks_out : ndarray of int
         Starting indices of each block relative to i_start.
     """
@@ -1324,61 +1311,61 @@ def shm_signal_segment(
     if not (0 <= overlap < 1):
         raise ValueError("overlap must satisfy 0 ≤ overlap < 1")
 
-    if block_size <= 0:
-        raise ValueError("block_size must be positive")
+    if blockSize <= 0:
+        raise ValueError("blockSize must be positive")
 
     # Re-orient
-    axis_flip = False
+    axisFlip = False
     if axisn == 1:
         signal = signal.T
-        axis_flip = True
+        axisFlip = True
 
-    n_total, n_chans = signal.shape
+    n_total, nchans = signal.shape
 
     if i_start < 0 or i_start >= n_total:
         raise ValueError("i_start falls outside the signal")
 
     # Truncate
-    hop_size = round(block_size * (1.0 - overlap))
-    if hop_size <= 0:
+    hopSize = round(blockSize * (1.0 - overlap))
+    if hopSize <= 0:
         raise ValueError("overlap too large: hop size becomes zero")
 
-    sig_tail = signal[i_start:]
-    if sig_tail.shape[0] <= block_size:
-        raise ValueError("Signal is too short for the requested block_size")
+    signalTrunc = signal[i_start:]
+    if signalTrunc.shape[0] <= blockSize:
+        raise ValueError("Signal is too short for the requested blockSize")
 
-    n_blocks = int(np.floor((sig_tail.shape[0] - overlap * block_size) / hop_size))
-    i_end = n_blocks * hop_size + int(overlap * block_size)
-    sig_trunc = sig_tail[:i_end]
+    n_blocks = int(np.floor((signalTrunc.shape[0] - overlap * blockSize) / hopSize))
+    i_end = n_blocks * hopSize + int(overlap * blockSize)
+    signalTrunc = signalTrunc[:i_end]
 
     # Build Block Matrix
-    windows = sliding_window_view(sig_trunc, window_shape=(block_size,), axis=0)
-    windows = windows[::hop_size]
-    windows = windows.reshape(-1, block_size, n_chans)
+    windows = sliding_window_view(signalTrunc, window_shape=(blockSize,), axis=0)
+    windows = windows[::hopSize]
+    windows = windows.reshape(-1, blockSize, nchans)
 
     if windows.shape[0] != n_blocks:
         windows = windows[:n_blocks]
 
     # Tail Block  (optional)
-    i_blocks_out = np.arange(0, n_blocks * hop_size, hop_size, dtype=int)
-    if end_shrink and sig_tail.shape[0] > sig_trunc.shape[0]:
-        tail_start = sig_tail.shape[0] - block_size
-        tail_block = sig_tail[tail_start : tail_start + block_size]
+    iBlocksOut = np.arange(0, n_blocks * hopSize, hopSize, dtype=int)
+    if endShrink and signalTrunc.shape[0] > signalTrunc.shape[0]:
+        tail_start = signalTrunc.shape[0] - blockSize
+        tail_block = signalTrunc[tail_start : tail_start + blockSize]
         tail_block = tail_block[:, :, None] if tail_block.ndim == 1 else tail_block
         windows = np.concatenate((windows, tail_block[None, ...]), axis=0)
-        i_blocks_out = np.concatenate((i_blocks_out, [tail_start]))
+        iBlocksOut = np.concatenate((iBlocksOut, [tail_start]))
 
     # Re-orient
     # current shape: (n_blocks, block_size, n_chans)
-    if axis_flip:
-        signal_segmented = windows.transpose(1, 0, 2)  # (block, n_blocks, chan)
+    if axisFlip:
+        signalSegmented = windows.transpose(1, 0, 2)  # (block, n_blocks, chan)
     else:
-        signal_segmented = windows.transpose(1, 0, 2)  # same orientation
-    # If axis_flip==True, caller expects (n_blocks, block, chan)
-    if axis_flip:
-        signal_segmented = signal_segmented.swapaxes(0, 1)
+        signalSegmented = windows.transpose(1, 0, 2)  # same orientation
+    # If axisFlip==True, caller expects (n_blocks, block, chan)
+    if axisFlip:
+        signalSegmented = signalSegmented.swapaxes(0, 1)
 
-    return signal_segmented, i_blocks_out
+    return signalSegmented, iBlocksOut
 
 # ------------------
 #### VALIDATION ####
