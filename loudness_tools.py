@@ -80,7 +80,7 @@ def Loudness_ISO532_1(insig, fs, field, method, time_skip=0, show=False):
 
         for i in range(N_bands):
             if method == 2: # time-varying from audio signal
-                smoothedaudio = np.zeros(len_sig,N_bands)
+                smoothedaudio = np.zeros((len_sig, N_bands))
                 Tau = 2 / (3 * CentreFrequency[i]) if CentreFrequency[i] <= 1000 else 2 / (3 * 1000.)
                 
                 # 3x smoothing 1st order low-pass filters in series
@@ -446,21 +446,23 @@ def Loudness_ISO532_1(insig, fs, field, method, time_skip=0, show=False):
         else:
             N = (N * 100 + .5) / 100
 
-        LN[l] = 40 * (N + .0005) ** .35
+        if method == 2:  # time-varying
+            LN[l] = 40 * (N + .0005) ** .35
+            if N >= 1:
+                LN[l] = 10 * np.log10(N) / np.log10(2) + 40
+            if LN[l] < 3:
+                LN[l] = 3
 
-        if LN[l] < 3:
-            LN[l] = 3
+        elif method in (0, 1):  # stationary
+            LN = 40 * N ** 0.35
+            if N >= 1:
+                LN = 40 + 10 * np.log2(N)
+            if LN < 0:
+                LN = 0
+            if LN < 3:
+                LN = 3
 
-        if N >= 1:
-            LN[l] = 10 * np.log10(N) / np.log10(2) + 40
-
-        if method==0 or method==1: # stationary method
-            LN = 40 * N ** .35
-            LN[N>=1] = 40 + 10 * np.log2(N[N>=1])
-            LN[LN<0] = 0
-            LN[LN<3] = 3
-
-        N_mat[0] = N # total loudness at current timeframe l
+        N_mat[l] = N
 
     # specific Loudness as a function of Bark number
     for i in range(240):
@@ -682,101 +684,3 @@ def Loudness_ISO532_1(insig, fs, field, method, time_skip=0, show=False):
 
             plt.tight_layout()
             plt.show()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    # Bark band integration
-    # The following is a simplified version; for a full implementation, use the ISO 532-1 procedure
-    SpecificLoudness = np.zeros((NumSamplesLevel, 21))
-    for j in range(NumSamplesLevel):
-        for i in range(21):
-            SpecificLoudness[j, i] = CoreL[j, i]
-
-    # --- Step 10: Calculate total loudness and loudness level ---
-    Loudness = np.sum(SpecificLoudness, axis=1)
-    LoudnessLevel = 40 + 10 * np.log10(Loudness + TINY_VALUE)
-
-    # --- Output struct ---
-    OUT = {}
-    if method == 2:
-        OUT['barkAxis'] = np.arange(1, 22)
-        OUT['time'] = np.arange(NumSamplesLevel) / SampleRateLevel
-        OUT['time_insig'] = np.arange(insig.shape[0]) / fs
-        OUT['InstantaneousLoudness'] = Loudness
-        OUT['InstantaneousSpecificLoudness'] = SpecificLoudness
-        idx = int(np.floor(time_skip * SampleRateLevel))
-        stats = get_statistics(Loudness[idx:], "Loudness_ISO532_1")
-        OUT.update(stats)
-    else:
-        OUT['time_insig'] = np.arange(insig.shape[0]) / fs
-        OUT['barkAxis'] = np.arange(1, 22)
-        OUT['SpecificLoudness'] = SpecificLoudness[0, :]
-        OUT['Loudness'] = Loudness[0]
-        OUT['LoudnessLevel'] = LoudnessLevel[0]
-        OUT['TimeAveragedSPL'] = ThirdOctaveLevel[0, :]
-        idx = int(np.floor(time_skip * fs))
-        stats = get_statistics(np.array([Loudness[0]]), "Loudness_ISO532_1")
-        OUT.update(stats)
-
-    return OUT
