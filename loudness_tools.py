@@ -88,7 +88,7 @@ def Loudness_ISO532_1(insig, fs, field, method, time_skip=0, show=False):
                 B0 = 1 - A1
                 Y1 = 0
                 for k in range(3):
-                    for j in range(filteredaudio):
+                    for j in range(len(filteredaudio)):
                         # smoothedaudio(j,i) = A1*temp(j,i) + B0*Y1;
                         smoothedaudio[j,i] = B0 * filteredaudio[j, i] + (A1 * Y1) # <----- modified from original by gfg
                         Y1 = smoothedaudio[j,i]
@@ -98,7 +98,7 @@ def Loudness_ISO532_1(insig, fs, field, method, time_skip=0, show=False):
                     idx = int(c)
                     if idx >= len_sig:
                         idx = len_sig - 1
-                    ThirdOctaveLevel[j, i] = 10 * np.log10((smoothedaudio[c,idx] + TINY_VALUE) / I_REF)
+                    ThirdOctaveLevel[j, i] = 10 * np.log10((smoothedaudio[idx,i] + TINY_VALUE) / I_REF)
                     c += DecFactorLevel
             elif method == 1: # stationary from audio signal
                 NumSkip = int(np.floor(time_skip * fs))
@@ -155,7 +155,7 @@ def Loudness_ISO532_1(insig, fs, field, method, time_skip=0, show=False):
 
         for i in range(3):
             if CBI[j, i] > 0:
-                LCB[j, i] = FNGi[j,i]
+                LCB[j, i] = FNGi[i]
             else:
                 LCB[j, i] = 0
 
@@ -186,7 +186,7 @@ def Loudness_ISO532_1(insig, fs, field, method, time_skip=0, show=False):
     CoreL = np.zeros((NumSamplesLevel, 21))
 
     for j in range(NumSamplesLevel):
-        for i in range(20):
+        for i in range(19):
             Le[j, i] = ThirdOctaveLevel[j, i + 8]
             if i <= 2:
                 Le[j, i] = LCB[j, i]
@@ -357,7 +357,7 @@ def Loudness_ISO532_1(insig, fs, field, method, time_skip=0, show=False):
 
     LN = np.zeros(NumSamplesLevel)
     N_mat = np.zeros(NumSamplesLevel)
-    Spec_N = np.zeros(1,240) 
+    Spec_N = np.zeros(240) 
     ZUP = ZUP+0.0001 # <----- add constant factor to ZUP according to code provided by ISO 532-1
     ns = np.zeros((NumSamplesLevel, 240))
 
@@ -684,3 +684,4 @@ def Loudness_ISO532_1(insig, fs, field, method, time_skip=0, show=False):
 
             plt.tight_layout()
             plt.show()
+    return OUT

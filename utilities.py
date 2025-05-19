@@ -201,7 +201,7 @@ def get_exceeded_value(input: FloatArrayLike, PercentValue: float) -> np.ndarray
 
     n = input.shape[0]
     X_index = int(np.floor((100 - PercentValue) / 100 * n))
-    X_index = max(X_index - 1, 0)
+    X_index = max(X_index - 1, 1)
 
     sort_input = np.sort(input, axis=0)[X_index, :]
 
