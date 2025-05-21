@@ -1,14 +1,33 @@
 import numpy as np
 from scipy.signal import resample_poly
+from scipy.io import wavfile
 from sound_metrics import ob13_iso532_1
 from utilities import get_statistics
 from matplotlib import pyplot as plt
 
-def Loudness_ISO532_1(insig, fs, field, method, time_skip=0, show=False):
+def Loudness_ISO532_1(insig, fs=None, field=0, method=2, time_skip=0, show=False, dBFS=94):
     """
     Zwicker Loudness model according to ISO 532-1 for stationary
     signals (Method A) and arbitrary signals (Method B).
     """
+
+    # --- WAV file interface ---
+    if isinstance(insig, str):
+        fs, insig_raw = wavfile.read(insig)
+        # Convert to float if needed
+        if insig_raw.dtype.kind in 'iu':
+            max_val = np.iinfo(insig_raw.dtype).max
+            insig = insig_raw.astype(np.float32) / max_val
+        else:
+            insig = insig_raw.astype(np.float32)
+        # dBFS scaling (default: 94 dB SPL full scale = 1 Pa)
+        gain_factor = 10 ** ((dBFS - 94) / 20)
+        insig = gain_factor * insig
+        # If stereo, convert to mono
+        if insig.ndim > 1:
+            insig = np.mean(insig, axis=1)
+    elif fs is None:
+        raise ValueError("If insig is not a filename, fs must be provided.")
 
     # --- Input handling ---
     insig = np.asarray(insig)
@@ -107,7 +126,7 @@ def Loudness_ISO532_1(insig, fs, field, method, time_skip=0, show=False):
                     raise ValueError('time signal too short')
                 if NumSkip == 0:
                     NumSkip = 1
-                ThirdOctaveLevel[NumSamplesLevel - 1, i] = 10 * np.log10((np.sum(smoothedaudio[:,i]) / len_sig + TINY_VALUE) / I_REF)
+                ThirdOctaveLevel[NumSamplesLevel - 1, i] = 10 * np.log10((np.sum(smoothedaudio[:]) / len_sig + TINY_VALUE) / I_REF)
 
     # ***********************************************************
     # STEP 4 - Apply weighting factor to the first three 1/3 octave bands

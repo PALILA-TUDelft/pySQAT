@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 playground/
 temp_trash/
+Original Matlab/
 
 # C extensions
 *.so
