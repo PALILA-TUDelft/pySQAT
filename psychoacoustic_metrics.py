@@ -850,32 +850,47 @@ def Tonality_Aures1985(insig, fs, LoudnessField, time_skip, show=False):
             ):
                 ToneIdx.append(i)
 
+        # Save tone information
         ToneIdx = np.array(ToneIdx)
-        ToneL = SPLcrop[ToneIdx] # SPL of the tones
-        ToneF = FreqCrop[ToneIdx] # central freq of the tone
+        ToneIdx = ToneIdx[ToneIdx > 0]  # Remove zeros from ToneIdx
+        ToneL = SPLcrop[ToneIdx]  # SPL of the tones
+        ToneF = FreqCrop[ToneIdx]  # Central frequency of the tones
 
-        # estimate bandwidth of the i-th tone using half-power (-3 dB decay) criteria (this analysis is made on the full SPL and freq vectors)
-        flow = np.zeros(len(ToneIdx))  # declare variable for memory allocation
-        fhigh = np.zeros(len(ToneIdx))
-        BW = np.zeros(len(ToneIdx))
+        # Estimate bandwidth of the i-th tone using half-power (-3 dB decay) criteria
+        flow = np.zeros(len(ToneIdx))  # Memory allocation for low frequency
+        fhigh = np.zeros(len(ToneIdx))  # Memory allocation for high frequency
+        BW = np.zeros(len(ToneIdx))  # Memory allocation for bandwidth
 
-        for i, idx in enumerate(ToneIdx): # Source: https://de.mathworks.com/matlabcentral/answers/1441689-i-am-trying-to-find-the-full-width-at-half-max-value-and-plot-the-waveform-with-markers?s_tid=srchtitle
-            
-            ymx = ToneL[i] # SPL of the i-th tone
+        for i in range(len(ToneIdx)):
+            ymx = ToneL[i]  # SPL of the i-th tone
+            idx = np.argmin(np.abs(Freq - ToneF[i]))  # Index of the i-th tone
+            hafmax = ymx * 0.707  # Target value
 
-            idxrng1 = np.where(SPL[:idx] < ymx * 0.707)[0][-1]
-            if len(np.where(SPL[:idx] < ymx * 0.707)[0]) == 0 or idxrng1 < 4: # if idxrng1 is empty, it means hafmax is below the 1st bin of the signal (probably due to a low freq tone with large bandwidth)
-                idxrng1 = 4 # in this case, truncate idxrng1 to 4
+            # Find the lower frequency index
+            idxrng1_candidates = np.where(SPL[:idx] < hafmax)[0]
+            idxrng1 = idxrng1_candidates[-1] if len(idxrng1_candidates) > 0 else None
 
-            idxrng2 = np.where(SPL[idx + 1 :] < ymx * 0.707)[0][0] + idx
+            if idxrng1 is None or idxrng1 < 4:
+                idxrng1 = 4  # Truncate idxrng1 to 4 if it's empty or too low
 
-            flow[i] = np.interp(ymx * 0.707, SPL[idxrng1 : idxrng1 + 2], Freq[idxrng1 : idxrng1 + 2]) # low freq of the band
-            fhigh[i] = np.interp(ymx * 0.707, SPL[idxrng2 - 1 : idxrng2 + 1], Freq[idxrng2 - 1 : idxrng2 + 1]) # high freq of the band
-            
-            BW[i] = fhigh[i] - flow[i] # tone's bandwidth
+            # Find the upper frequency index
+            idxrng2_candidates = np.where(SPL[idx + 1:len(Freq)+1] < hafmax)[0]
+            idxrng2 = idxrng2_candidates[0] + idx if len(idxrng2_candidates) > 0 else None
 
-        BW[BW == 0] = 1 # if BW is zero, truncate BW to 1
-        BW[np.isinf(BW) | np.isnan(BW)] = 1 # replace inf and NaN
+            # Interpolate frequencies for low and high bounds
+            flow[i] = np.interp(hafmax, SPL[idxrng1:idxrng1 + 2], Freq[idxrng1:idxrng1 + 2])
+            fhigh[i] = np.interp(hafmax, SPL[idxrng2 - 1:idxrng2 + 1], Freq[idxrng2 - 1:idxrng2 + 1])
+
+            # Calculate bandwidth
+            BW[i] = fhigh[i] - flow[i]
+            BW *= 2 # WARNING! soft fix
+
+            # Handle edge cases for bandwidth
+            if BW[i] == 0:
+                BW[i] = 1  # If BW is zero, truncate to 1
+
+        # Replace inf and NaN values in BW
+        BW[np.isinf(BW) | np.isnan(BW)] = 1
 
 
         if len(ToneIdx) == 0:  # if ToneRef is empty, then there are no tones for this time-frame
@@ -895,9 +910,9 @@ def Tonality_Aures1985(insig, fs, LoudnessField, time_skip, show=False):
             BW = BW[idx] # bandwidth
 
             ## Filtering out the tones from the signal
-            y = insig[:, iFrame]  # get insig for each iFrames
+            y = insig[iFrame, :]  # get insig for each iFrames
             insigSpectrum = np.fft.fft(y)  # spectrum of insig for each iFrames
-            SingleSidedinsigSpectrum = insigSpectrum[:len(insigSpectrum) // 2 + 1] # single-sided spectrum of insig for each iFrames
+            SingleSidedinsigSpectrum = insigSpectrum[:int(np.ceil((len(insigSpectrum)+1)/ 2))] # single-sided spectrum of insig for each iFrames
             FreqSingleSidedinsigSpectrum = np.linspace(0, fs / 2, len(SingleSidedinsigSpectrum)) # freq vector of single-sided spectrum of insig for each iFrames
 
             for i in range(len(ToneF)):  # Loop across tones
@@ -920,8 +935,16 @@ def Tonality_Aures1985(insig, fs, LoudnessField, time_skip, show=False):
             filtered_signal = np.fft.ifft(doubleSideFilteredSpectrum).real
 
             # Compute w_gr (loudness weighting)
-            L_total = Loudness_ISO532_1(y, fs, LoudnessField, 1, time_resolution * 0.05, False)
-            L_filtered = Loudness_ISO532_1(filtered_signal, fs, LoudnessField, 1, time_resolution * 0.05, False)
+            L_total = Loudness_ISO532_1(y, fs,
+                                        LoudnessField,
+                                        1,
+                                        time_resolution * 0.05,
+                                        False)
+            L_filtered = Loudness_ISO532_1(filtered_signal, fs,
+                                           LoudnessField,
+                                           1,
+                                           time_resolution * 0.05,
+                                           False)
 
             # loudness weighting per time frame
             w_gr[iFrame] = 1 - (L_filtered["Loudness"] / L_total["Loudness"])
