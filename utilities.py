@@ -6,6 +6,7 @@
 import os
 import warnings
 import numpy as np
+import pandas as pd
 from numpy.lib.stride_tricks import sliding_window_view
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
@@ -680,6 +681,29 @@ def get_defaults(model_name: str) -> Dict[str, Any]:
 
     # --------- Unknown model -------------------------------------
     raise ValueError("Unrecognised model name: '{}'".format(model_name))
+
+def export_dict_to_excel(data_dict, filename="output.xlsx"):
+    with pd.ExcelWriter(filename) as writer:
+        for key, value in data_dict.items():
+            try:
+                if isinstance(value, (int, float, str)):
+                    # Wrap scalar in DataFrame
+                    df = pd.DataFrame({key: [value]})
+                elif isinstance(value, (list, np.ndarray)):
+                    value = np.array(value)
+                    if value.ndim == 1:
+                        df = pd.DataFrame({key: value})
+                    elif value.ndim == 2:
+                        df = pd.DataFrame(value)
+                    else:
+                        continue  # skip 3D or higher
+                else:
+                    continue  # skip unsupported types
+
+                df.to_excel(writer, sheet_name=key[:31], index=False)
+            except Exception as e:
+                print(f"Could not write {key}: {e}")
+
 
 # ---------------------------
 #### ECMA418_2 FUNCTIONS ####
