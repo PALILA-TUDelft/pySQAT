@@ -4,11 +4,36 @@ from scipy.io import wavfile
 from sound_metrics import ob13_iso532_1
 from utilities import get_statistics
 from matplotlib import pyplot as plt
+import pandas as pd
 
-def Loudness_ISO532_1(insig, fs=None, field=0, method=2, time_skip=0, show=False, dBFS=94):
+__all__ = ["Loudness_ISO532_1"]
+
+"""
+loudness_tools.py
+------------------
+This module contains functions and classes for calculating loudness metrics
+based on several.
+
+Functions:
+- Loudness_ISO532_1: Implements the Zwicker loudness model.
+"""
+
+def Loudness_ISO532_1(insig, fs=None, field=0, method=2, time_skip=0, show=False, dBFS=94, export_excel=None):
     """
-    Zwicker Loudness model according to ISO 532-1 for stationary
-    signals (Method A) and arbitrary signals (Method B).
+    Implements the Zwicker loudness model according to ISO 532-1:2017.
+
+    Parameters:
+    - insig: Input signal (array or string for WAV file).
+    - fs: Sampling rate (Hz).
+    - field: Acoustic field type (0 = free field, 1 = diffuse field).
+    - method: Analysis method (0 = stationary, 1 = time-varying).
+    - time_skip: Time to skip from start (seconds).
+    - show: Whether to display plots.
+    - dBFS: Reference full-scale SPL in dB.
+    - export_excel: Path to export results to Excel.
+
+    Returns:
+    - OUT: Dictionary containing loudness metrics.
     """
 
     # --- WAV file interface ---
@@ -703,4 +728,33 @@ def Loudness_ISO532_1(insig, fs=None, field=0, method=2, time_skip=0, show=False
 
             plt.tight_layout()
             plt.show()
+
+    if export_excel is not None:
+        export_dict_to_excel(OUT, filename=f"{export_excel}")
+
+
     return OUT
+
+# Helpers
+
+def export_dict_to_excel(data_dict, filename="output.xlsx"):
+    with pd.ExcelWriter(filename) as writer:
+        for key, value in data_dict.items():
+            try:
+                if isinstance(value, (int, float, str)):
+                    # Wrap scalar in DataFrame
+                    df = pd.DataFrame({key: [value]})
+                elif isinstance(value, (list, np.ndarray)):
+                    value = np.array(value)
+                    if value.ndim == 1:
+                        df = pd.DataFrame({key: value})
+                    elif value.ndim == 2:
+                        df = pd.DataFrame(value)
+                    else:
+                        continue  # skip 3D or higher
+                else:
+                    continue  # skip unsupported types
+
+                df.to_excel(writer, sheet_name=key[:31], index=False)
+            except Exception as e:
+                print(f"Could not write {key}: {e}")
