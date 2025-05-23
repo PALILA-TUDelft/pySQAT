@@ -190,23 +190,20 @@ def get_exceeded_value(input: FloatArrayLike, PercentValue: float) -> np.ndarray
     ndarray
         Exceeded values for each channel.
     """
-    input = np.asarray(input)
+    # Sort the input array
+    sort_input = np.sort(input, axis=0)
 
+    # Calculate the index corresponding to the exceeded value
+    X_index = int(np.ceil((1 - PercentValue / 100) * input.shape[0])) - 1
+
+    # Clamp X_index to the valid range
+    X_index = max(0, min(X_index, input.shape[0] - 1))
+
+    # Handle edge cases for 1D input
     if input.ndim == 1:
-        input = input[:, None]
-    elif input.shape[1] > 3 and input.shape[0] <= 3:
-        input = input.T
-
-    if input.shape[1] > 3:
-        raise ValueError("Input has more than three channels.")
-
-    n = input.shape[0]
-    X_index = int(np.floor((100 - PercentValue) / 100 * n))
-    X_index = max(X_index - 1, 1)
-
-    sort_input = np.sort(input, axis=0)[X_index, :]
-
-    return sort_input
+        return sort_input[X_index]
+    else:
+        return sort_input[X_index, :]
 
 def get_statistics(input: FloatArrayLike, metric: str) -> Dict[str, np.ndarray]:
     """Compute descriptive statistics for a psycho‑acoustic time‑series.

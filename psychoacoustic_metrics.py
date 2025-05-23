@@ -1,6 +1,8 @@
 import numpy as np
 from scipy.io import wavfile
-from scipy.signal import resample_poly, hann, fft
+from scipy.signal import resample_poly
+from scipy.fft import fft
+from scipy.signal.windows import hann
 from matplotlib import pyplot as plt
 
 from sound_metrics import ob13_iso532_1
@@ -760,9 +762,10 @@ def Tonality_Aures1985(insig, fs, LoudnessField, time_skip, show=False):
 
     # resampling audo to 44.1 kHz or 48kHz
     if fs not in [44100, 48000]:
-        gcd_fs = np.gcd(44100, fs)  # greatest common denominator
+        gcd_fs = np.gcd(44100, fs)
         insig = resample_poly(insig, 44100 // gcd_fs, fs // gcd_fs)
         fs = 44100
+        t_b = np.arange(len(insig)) / fs  # Recalculate time vector after resampling
 
     # Window parameters
     time_resolution = 160e-3  # window length fixed in 160 ms, gives a df=6.25 Hz
@@ -770,7 +773,7 @@ def Tonality_Aures1985(insig, fs, LoudnessField, time_skip, show=False):
     N = round(fs * time_resolution)  # define window length, N bins
     window = hann(N)
 
-    fftgain = np.sqrt(2) / (N * np.mean(hann(N)))
+    fftgain = np.sqrt(2) / (N * np.mean(window))
 
     ## freq vectors based on window input signals -------------------------
 
@@ -796,7 +799,11 @@ def Tonality_Aures1985(insig, fs, LoudnessField, time_skip, show=False):
     insig = np.lib.stride_tricks.sliding_window_view(insig, N)[::overlap]
     t_b = np.lib.stride_tricks.sliding_window_view(t_b, N)[::overlap]
 
-    nFrames = insig.shape[1] - 1
+    # Verify the shape of insig
+    if insig.ndim != 2:
+        raise ValueError(f"Expected insig to be 2D after segmentation, but got shape {insig.shape}")
+
+    nFrames = insig.shape[0]
 
     tone = [None] * nFrames # Memory allocation: tone cell per time frame
     tonality = np.zeros(nFrames) # Memory allocation for tonality computation
@@ -810,7 +817,7 @@ def Tonality_Aures1985(insig, fs, LoudnessField, time_skip, show=False):
     for iFrame in range(nFrames):
 
         ## windowed time-frame
-        Winsig = insig[:, iFrame] * window # cut insig for each iFrames & Apply window to frame
+        Winsig = insig[iFrame] * window # cut insig for each iFrames & Apply window to frame
         t[iFrame] = t_b[0, iFrame] # output time vector for iFrames
 
         ## Compute SPL for each time-frame
@@ -1011,7 +1018,7 @@ def il_SPL_excess(input):
 
         idx_cb = (spectrumBark >= round(toneBark[i] - 0.5)) & (spectrumBark <= round(toneBark[i] + 0.5)) # idx of the critical band around the tonal component
         
-        idx_toneBark = np.where(round(spectrumBark == toneBark[i]))[0] # find idx of the tone on the Bark vector
+        idx_toneBark = np.argmin(np.abs(spectrumBark - toneBark[i])) # find idx of the tone on the Bark vector
         
         idx_cb[idx_toneBark - 2 : idx_toneBark + 3] = False # skip the five central samples around the tonal component
 
@@ -1061,8 +1068,8 @@ def il_tonal_weighting(input):
 
     ## w1 accounts for each tonal component bandwidth
 
-    zup = il_Fq2Bark(fc + (bw / 2))
-    zlow = il_Fq2Bark(fc - (bw / 2))
+    zup = hz2bark(fc + (bw / 2))
+    zlow = hz2bark(fc - (bw / 2))
     dz = (zup - zlow) / df ** 2
 
     w1 = 0.13 / (dz + 0.13)
