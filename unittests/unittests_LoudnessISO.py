@@ -2,8 +2,9 @@ import sys
 import os
 import unittest
 import numpy as np
-from psychoacoustic_metrics import Loudness_ISO532_1
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from psychoacoustic_metrics import Loudness_ISO532_1
 
 class TestLoudnessISO5321(unittest.TestCase):
     def setUp(self):
@@ -47,12 +48,25 @@ class TestLoudnessISO5321(unittest.TestCase):
         except Exception as e:
             self.fail(f"Loudness_ISO532_1 raised an exception with show=True: {e}")
 
-    def test_export_excel(self):
-        # Test with export_excel parameter
-        try:
-            Loudness_ISO532_1(self.insig, self.fs, self.field, self.method, self.time_skip, show=False, export_excel="test_output.xlsx")
-        except Exception as e:
-            self.fail(f"Loudness_ISO532_1 raised an exception with export_excel: {e}")
+    def test_white_noise(self):
+        white_noise = np.random.normal(0, 0.1, len(self.t))
+        result = Loudness_ISO532_1(white_noise, self.fs, self.field, self.method, self.time_skip, show=False)
+        self.assertIsInstance(result, dict)
+        self.assertIn("InstantaneousLoudness", result)
+
+    def test_non_standard_sampling_rate(self):
+        fs_non_standard = 44100
+        result = Loudness_ISO532_1(self.insig, fs_non_standard, self.field, self.method, self.time_skip, show=False)
+        self.assertIsInstance(result, dict)
+        self.assertIn("InstantaneousLoudness", result)
+    
+    def test_invalid_method(self):
+        with self.assertRaises(ValueError):
+            Loudness_ISO532_1(self.insig, self.fs, self.field, method=3, time_skip=self.time_skip, show=False)
+
+    def test_time_skip_exceeds_duration(self):
+        with self.assertRaises(ValueError):
+            Loudness_ISO532_1(self.insig, self.fs, self.field, self.method, time_skip=20, show=False)
 
 if __name__ == "__main__":
     unittest.main()

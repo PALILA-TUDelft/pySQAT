@@ -20,6 +20,10 @@ signal = amp * np.sin(2 * np.pi * f0 * t)
 # Compute tonality using Aures 1985 model
 result = Tonality_Aures1985(signal, fs=fs, LoudnessField=0, time_skip=0.5, show=True)
 
+print("Mean Tonal Weighting (w_tonal):", np.mean(result['TonalWeighting']))
+print("Mean Loudness Weighting (w_gr):", np.mean(result['LoudnessWeighting']))
+print("Mean Tonality:", np.mean(result['InstantaneousTonality']))
+
 # Print statistics
 print("Tonality Statistics:")
 for k, v in result.items():

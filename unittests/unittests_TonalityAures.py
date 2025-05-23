@@ -1,5 +1,9 @@
+import sys
+import os
 import unittest
 import numpy as np
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from psychoacoustic_metrics import Tonality_Aures1985
 
 class TestTonalityAures1985(unittest.TestCase):

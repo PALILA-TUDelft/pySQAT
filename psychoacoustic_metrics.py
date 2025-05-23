@@ -61,6 +61,7 @@ def Loudness_ISO532_1(insig, fs=None, field=0, method=2, time_skip=0, show=False
 
     # --- Input handling ---
     insig = np.asarray(insig)
+
     if method == 0:
         insig = np.atleast_2d(insig)
         if insig.shape[0] != 1:
@@ -69,7 +70,10 @@ def Loudness_ISO532_1(insig, fs=None, field=0, method=2, time_skip=0, show=False
         insig = np.atleast_2d(insig)
         if insig.shape[1] != 1:
             insig = insig.T
-
+    
+    if fs is None or fs <= 0:
+        raise ValueError("Sampling frequency (fs) must be a positive number.")
+    
     # Time constants for non-linear temporal decay
     Tshort = 0.005
     Tlong = 0.015
@@ -91,7 +95,7 @@ def Loudness_ISO532_1(insig, fs=None, field=0, method=2, time_skip=0, show=False
         NumSamplesLevel = 1
 
         ThirdOctaveLevel = insig # get 1/3 octave levels from insig if method = 0
-    else:
+    elif method == 1 or method == 2:
         # if different from stationary (from input 1/3 octave unweighted SPL)  
 
         # **************************************************
@@ -158,6 +162,8 @@ def Loudness_ISO532_1(insig, fs=None, field=0, method=2, time_skip=0, show=False
                     NumSkip = 1
                 ThirdOctaveLevel[NumSamplesLevel - 1, i] = 10 * np.log10((np.sum(smoothedaudio[:]) / len_sig + TINY_VALUE) / I_REF)
 
+    else:
+        raise ValueError("Invalid method. Choose 0 (stationary), 1 (stationary from audio signal), or 2 (time-varying from audio signal).")
     # ***********************************************************
     # STEP 4 - Apply weighting factor to the first three 1/3 octave bands
     # ***********************************************************
@@ -762,10 +768,9 @@ def Tonality_Aures1985(insig, fs, LoudnessField, time_skip, show=False):
 
     # resampling audo to 44.1 kHz or 48kHz
     if fs not in [44100, 48000]:
-        gcd_fs = np.gcd(44100, fs)
+        gcd_fs = np.gcd(44100, fs) # greatest common denominator
         insig = resample_poly(insig, 44100 // gcd_fs, fs // gcd_fs)
         fs = 44100
-        t_b = np.arange(len(insig)) / fs  # Recalculate time vector after resampling
 
     # Window parameters
     time_resolution = 160e-3  # window length fixed in 160 ms, gives a df=6.25 Hz
@@ -781,13 +786,13 @@ def Tonality_Aures1985(insig, fs, LoudnessField, time_skip, show=False):
     # confined in the frequency region of about 20 Hz to 5 kHz.
 
     MinFrequency = 20
-    MinFrequencyindex = int(np.ceil(1 + (MinFrequency * (N / fs)))) # index corresponding to min frequency (20 Hz) for tone extraction
+    MinFrequencyindex = int(np.ceil(1 + (MinFrequency * (N / fs)))-1) # index corresponding to min frequency (20 Hz) for tone extraction
 
     MaxFrequency = 5000
-    MaxFrequencyIndex = int(np.ceil(1 + (MaxFrequency * (N / fs)))) # index corresponding to max frequency (5 kHz) for tone extraction
+    MaxFrequencyIndex = int(np.ceil(1 + (MaxFrequency * (N / fs)))-1) # index corresponding to max frequency (5 kHz) for tone extraction
 
     Freq = fs * (np.arange(1, round(N) + 1) - 1) / N # freq vector
-    FreqCrop = Freq[MinFrequencyindex:MaxFrequencyIndex] # croped freq vector from MinFrequencyindex till MaxFrequencyIndex
+    FreqCrop = Freq[MinFrequencyindex:MaxFrequencyIndex+1] # croped freq vector from MinFrequencyindex till MaxFrequencyIndex
     df = FreqCrop[1] - FreqCrop[0] # freq discretization
 
     ## Initialize windowed vectors
@@ -795,15 +800,16 @@ def Tonality_Aures1985(insig, fs, LoudnessField, time_skip, show=False):
     t_b = np.arange(1, len(insig) + 1) / fs # time vector
 
     overlap = round(0.5 * N) # overlap 
+    hop_size = N - overlap
 
-    insig = np.lib.stride_tricks.sliding_window_view(insig, N)[::overlap]
-    t_b = np.lib.stride_tricks.sliding_window_view(t_b, N)[::overlap]
+    insig = np.lib.stride_tricks.sliding_window_view(insig, N)[::hop_size]
+    t_b = np.lib.stride_tricks.sliding_window_view(t_b, N)[::hop_size]
 
     # Verify the shape of insig
     if insig.ndim != 2:
         raise ValueError(f"Expected insig to be 2D after segmentation, but got shape {insig.shape}")
 
-    nFrames = insig.shape[0]
+    nFrames = insig.shape[0] - 1
 
     tone = [None] * nFrames # Memory allocation: tone cell per time frame
     tonality = np.zeros(nFrames) # Memory allocation for tonality computation
@@ -818,7 +824,7 @@ def Tonality_Aures1985(insig, fs, LoudnessField, time_skip, show=False):
 
         ## windowed time-frame
         Winsig = insig[iFrame] * window # cut insig for each iFrames & Apply window to frame
-        t[iFrame] = t_b[0, iFrame] # output time vector for iFrames
+        t[iFrame] = t_b[iFrame,0] # output time vector for iFrames
 
         ## Compute SPL for each time-frame
         SpectralEnergy = np.abs(fft(Winsig * fftgain)) ** 2
@@ -826,14 +832,14 @@ def Tonality_Aures1985(insig, fs, LoudnessField, time_skip, show=False):
 
         ## Find peaks according to Terhard's criteria for each time-frame
 
-        SPLcrop = SPL[MinFrequencyindex:MaxFrequencyIndex] # crop SPL vector from MinFrequencyindex to MaxFrequencyIndex
+        SPLcrop = SPL[MinFrequencyindex:MaxFrequencyIndex+1] # crop SPL vector from MinFrequencyindex to MaxFrequencyIndex
 
         threshold = 7 # condition for tonal component, in dBSPL
 
         ToneIdx = [] # initialize vector, tonal components idx
         
         # find tones
-        for i in range(3, len(SPLcrop) - 3):
+        for i in range(4, len(SPLcrop) - 2):
             if (
                 SPLcrop[i] > SPLcrop[i - 1] # first condition
                 and SPLcrop[i] >= SPLcrop[i + 1]
@@ -858,6 +864,9 @@ def Tonality_Aures1985(insig, fs, LoudnessField, time_skip, show=False):
             ymx = ToneL[i] # SPL of the i-th tone
 
             idxrng1 = np.where(SPL[:idx] < ymx * 0.707)[0][-1]
+            if len(np.where(SPL[:idx] < ymx * 0.707)[0]) == 0 or idxrng1 < 4: # if idxrng1 is empty, it means hafmax is below the 1st bin of the signal (probably due to a low freq tone with large bandwidth)
+                idxrng1 = 4 # in this case, truncate idxrng1 to 4
+
             idxrng2 = np.where(SPL[idx + 1 :] < ymx * 0.707)[0][0] + idx
 
             flow[i] = np.interp(ymx * 0.707, SPL[idxrng1 : idxrng1 + 2], Freq[idxrng1 : idxrng1 + 2]) # low freq of the band
@@ -885,66 +894,57 @@ def Tonality_Aures1985(insig, fs, LoudnessField, time_skip, show=False):
             ToneF = ToneF[idx] #  central freq of the tone
             BW = BW[idx] # bandwidth
 
-            if len(ToneIdx) == 0:  # if ToneRef is empty
+            ## Filtering out the tones from the signal
+            y = insig[:, iFrame]  # get insig for each iFrames
+            insigSpectrum = np.fft.fft(y)  # spectrum of insig for each iFrames
+            SingleSidedinsigSpectrum = insigSpectrum[:len(insigSpectrum) // 2 + 1] # single-sided spectrum of insig for each iFrames
+            FreqSingleSidedinsigSpectrum = np.linspace(0, fs / 2, len(SingleSidedinsigSpectrum)) # freq vector of single-sided spectrum of insig for each iFrames
 
-                ## Outputs for this case
-                w_tonal[iFrame] = 0  # Tonal weighting
-                w_gr[iFrame] = 0  # Loudness weighting
-                tonality[iFrame] = 0  # Tonality
+            for i in range(len(ToneF)):  # Loop across tones
 
-            else:  # if tones were found and their SPL is above 0 dB
+                index_low = np.where(FreqSingleSidedinsigSpectrum >= (ToneF[i] - BW[i] / 2))[0][0] # find idx of i-th tone's lower freq
+                index_up = np.where(FreqSingleSidedinsigSpectrum >= (ToneF[i] + BW[i] / 2))[0][0] # find idx of i-th tone's upper freq
 
-                ## Filtering out the tones from the signal
-                y = insig[:, iFrame]  # get insig for each iFrames
-                insigSpectrum = np.fft.fft(y)  # spectrum of insig for each iFrames
-                SingleSidedinsigSpectrum = insigSpectrum[:len(insigSpectrum) // 2 + 1] # single-sided spectrum of insig for each iFrames
-                FreqSingleSidedinsigSpectrum = np.linspace(0, fs / 2, len(SingleSidedinsigSpectrum)) # freq vector of single-sided spectrum of insig for each iFrames
+                if index_low == 0: # may happen with low-freq tones with large bandwidth
+                    magn = 0.5 * (np.abs(SingleSidedinsigSpectrum[index_low]) + # create a magnitude vector
+                                np.abs(SingleSidedinsigSpectrum[index_up + 1]))
+                else:
+                    magn = 0.5 * (np.abs(SingleSidedinsigSpectrum[index_low - 1]) + # create a magnitude vector
+                                np.abs(SingleSidedinsigSpectrum[index_up + 1]))
 
-                for i in range(len(ToneF)):  # Loop across tones
+                phase = (np.random.rand(index_up - index_low + 1) - 0.5) * 2 * np.pi # create random phase vector
+                SingleSidedinsigSpectrum[index_low:index_up + 1] = magn * np.exp(1j * phase) # replace tones
 
-                    index_low = np.where(FreqSingleSidedinsigSpectrum >= (ToneF[i] - BW[i] / 2))[0][0] # find idx of i-th tone's lower freq
-                    index_up = np.where(FreqSingleSidedinsigSpectrum >= (ToneF[i] + BW[i] / 2))[0][0] # find idx of i-th tone's upper freq
+            doubleSideFilteredSpectrum = np.concatenate( # double-side the filtered spectrum
+                [SingleSidedinsigSpectrum, np.conj(SingleSidedinsigSpectrum[-2:0:-1])]) # get filtered signal in time-domain
+            filtered_signal = np.fft.ifft(doubleSideFilteredSpectrum).real
 
-                    if index_low == 0: # may happen with low-freq tones with large bandwidth
-                        magn = 0.5 * (np.abs(SingleSidedinsigSpectrum[index_low]) + # create a magnitude vector
-                                    np.abs(SingleSidedinsigSpectrum[index_up + 1]))
-                    else:
-                        magn = 0.5 * (np.abs(SingleSidedinsigSpectrum[index_low - 1]) + # create a magnitude vector
-                                    np.abs(SingleSidedinsigSpectrum[index_up + 1]))
+            # Compute w_gr (loudness weighting)
+            L_total = Loudness_ISO532_1(y, fs, LoudnessField, 1, time_resolution * 0.05, False)
+            L_filtered = Loudness_ISO532_1(filtered_signal, fs, LoudnessField, 1, time_resolution * 0.05, False)
 
-                    phase = (np.random.rand(index_up - index_low + 1) - 0.5) * 2 * np.pi # create random phase vector
-                    SingleSidedinsigSpectrum[index_low:index_up + 1] = magn * np.exp(1j * phase) # replace tones
+            # loudness weighting per time frame
+            w_gr[iFrame] = 1 - (L_filtered["Loudness"] / L_total["Loudness"])
+            if w_gr[iFrame] < 0:
+                w_gr[iFrame] = 0
 
-                doubleSideFilteredSpectrum = np.concatenate( # double-side the filtered spectrum
-                    [SingleSidedinsigSpectrum, np.conj(SingleSidedinsigSpectrum[-2:0:-1])]) # get filtered signal in time-domain
-                filtered_signal = np.fft.ifft(doubleSideFilteredSpectrum).real
+            # Compute tonal weighting
+            tone[iFrame] = {
+                "Lcrop": SPLcrop, # SPL of the spectrum - SPLcrop = SPL(MinFrequencyindex:MaxFrequencyIndex);
+                "freq": FreqCrop, # frequency vector - freq = freq_all(MinFrequencyindex:MaxFrequencyIndex);
+                "ToneF": ToneF, # ToneF: central frequency of the tones
+                "ToneL": ToneL, # ToneF: central frequency of the tones
+                "BW": BW, # bandwidth of the tones
+                "df": df, # freq discretization
+            }
+            tone[iFrame]["LX"] = il_SPL_excess(tone[iFrame]) # Sound pressure excess calculation (define aurally relevance of the tones)
+            
+            w_tonal[iFrame] = il_tonal_weighting(tone[iFrame]) # Tonal weighting
 
-                # Compute w_gr (loudness weighting)
-                L_total = Loudness_ISO532_1(y, fs, LoudnessField, 1, time_resolution * 0.05, False)
-                L_filtered = Loudness_ISO532_1(filtered_signal, fs, LoudnessField, 1, time_resolution * 0.05, False)
-                
-                # loudness weighting per time frame
-                w_gr[iFrame] = 1 - (L_filtered["Loudness"] / L_total["Loudness"])
-                if w_gr[iFrame] < 0:
-                    w_gr[iFrame] = 0
+            ## TONALITY
 
-                # Compute tonal weighting
-                tone[iFrame] = {
-                    "Lcrop": SPLcrop, # SPL of the spectrum - SPLcrop = SPL(MinFrequencyindex:MaxFrequencyIndex);
-                    "freq": FreqCrop, # frequency vector - freq = freq_all(MinFrequencyindex:MaxFrequencyIndex);
-                    "ToneF": ToneF, # ToneF: central frequency of the tones
-                    "ToneL": ToneL, # ToneF: central frequency of the tones
-                    "BW": BW, # bandwidth of the tones
-                    "df": df, # freq discretization
-                }
-                tone[iFrame]["LX"] = il_SPL_excess(tone[iFrame]) # Sound pressure excess calculation (define aurally relevance of the tones)
-                
-                w_tonal[iFrame] = il_tonal_weighting(tone[iFrame]) # Tonal weighting
-
-                ## TONALITY
-
-                C = 1.125  # is a constant such that 1 kHz pure tone with a level of 60 dB would have a tonalness of 1, which for an ideal implementaiton should be =1.09
-                tonality[iFrame] = abs(C * w_tonal[iFrame] ** 0.29 * w_gr[iFrame] ** 0.79)
+            C = 1.125  # is a constant such that 1 kHz pure tone with a level of 60 dB would have a tonalness of 1, which for an ideal implementaiton should be =1.09
+            tonality[iFrame] = abs(C * w_tonal[iFrame] ** 0.29 * w_gr[iFrame] ** 0.79)
 
     ## Output data
     OUT = {
@@ -988,6 +988,9 @@ def Tonality_Aures1985(insig, fs, LoudnessField, time_skip, show=False):
         plt.tight_layout()
         plt.show()
 
+    print("L_total:", L_total['Loudness'])
+    print("L_filtered:", L_filtered['Loudness'])
+    print(f"W_gr: {1-L_total['Loudness']/L_filtered['Loudness']}")
     return OUT
 
 
