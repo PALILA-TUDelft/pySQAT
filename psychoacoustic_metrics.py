@@ -7,6 +7,7 @@ from matplotlib import pyplot as plt
 
 from sound_metrics import ob13_iso532_1
 from utilities import hz2bark, get_statistics, export_dict_to_excel
+from utilities import shm_resample, shm_preproc, shm_auditory_filt_bank, shm_basis_loudness, shm_noise_red_lowpass, shm_out_mid_ear_filter, shm_rough_low_pass, shm_rough_weight, shm_signal_segment
 
 __all__ = ["Loudness_ISO532_1", "Tonality_Aures1985"]
 
@@ -43,19 +44,8 @@ def Loudness_ISO532_1(insig, fs=None, field=0, method=2, time_skip=0, show=False
 
     # --- WAV file interface ---
     if isinstance(insig, str):
-        fs, insig_raw = wavfile.read(insig)
-        # Convert to float if needed
-        if insig_raw.dtype.kind in 'iu':
-            max_val = np.iinfo(insig_raw.dtype).max
-            insig = insig_raw.astype(np.float32) / max_val
-        else:
-            insig = insig_raw.astype(np.float32)
-        # dBFS scaling (default: 94 dB SPL full scale = 1 Pa)
-        gain_factor = 10 ** ((dBFS - 94) / 20)
-        insig = gain_factor * insig
-        # If stereo, convert to mono
-        if insig.ndim > 1:
-            insig = np.mean(insig, axis=1)
+        insig, fs = wav2sig(insig, fs, dBFS)
+
     elif fs is None:
         raise ValueError("If insig is not a filename, fs must be provided.")
 
@@ -746,11 +736,12 @@ def Loudness_ISO532_1(insig, fs=None, field=0, method=2, time_skip=0, show=False
 
     return OUT
 
+
 # ----------------------
 #### TONALITY METRICS ####
 # ----------------------
 
-def Tonality_Aures1985(insig, fs, LoudnessField, time_skip, show=False):
+def Tonality_Aures1985(insig, fs=None, LoudnessField=0, time_skip=0, show=False, dBFS=94):
     """
     Implements the Aures (1985) tonality metric based on Terhardt's virtual pitch theory.
 
@@ -764,6 +755,14 @@ def Tonality_Aures1985(insig, fs, LoudnessField, time_skip, show=False):
     Returns:
     - OUT: Dictionary containing tonality metrics and statistics.
     """
+
+    # --- WAV file interface ---
+    if isinstance(insig, str):
+        insig, fs = wav2sig(insig, fs, dBFS)
+
+    elif fs is None:
+        raise ValueError("If insig is not a filename, fs must be provided.")
+
     ## resampling ------------------------------------------------------
 
     # resampling audo to 44.1 kHz or 48kHz
@@ -1016,6 +1015,134 @@ def Tonality_Aures1985(insig, fs, LoudnessField, time_skip, show=False):
     print(f"W_gr: {1-L_total['Loudness']/L_filtered['Loudness']}")
     return OUT
 
+def Tonality_ECMA418_2(insig, fs, fieldtype='free-frontal', time_skip=0.304, show=False):
+    """
+    Returns tonality values and frequencies according to ECMA-418-2:2024.
+    """
+
+    # Input validation
+    if insig.ndim > 2:
+        raise ValueError("Input signal has more than 2 channels.")
+    if insig.shape[1] > 2:
+        insig = insig.T
+        print("Warning: Input signal was transposed to match [Nx1] or [Nx2] format.")
+    if insig.shape[0] < time_skip * fs:
+        raise ValueError("Input signal is too short to calculate tonality (must be at least 304 ms).")
+    if time_skip < 0.304:
+        print("Warning: time_skip must be at least 304 ms. Setting time_skip to 304 ms.")
+        time_skip = 0.304
+
+    # Determine input channels
+    inchans = insig.shape[1] if insig.ndim == 2 else 1
+    binaural = inchans == 2
+    chans = ["Stereo left", "Stereo right"] if binaural else ["Mono"]
+
+    # Define constants
+
+    sampleRate48k = 48000 # Signal sample rate prescribed to be 48kHz (to be used for resampling), Section 5.1.1 ECMA-418-2:2024 [r_s]
+    deltaFreq0 = 81.9289 # defined in Section 5.1.4.1 ECMA-418-2:2024 [deltaf(f=0)]
+    c = 0.1618 # Half-Bark band centre-frequency denominator constant defined in Section 5.1.4.1 ECMA-418-2:2024
+
+    halfBark = np.arange(0.5, 26.5 + 0.5, 0.5) # half-critical band rate scale [z]
+    bandCentreFreqs = (deltaFreq0 / c) * np.sinh(c * halfBark) # Section 5.1.4.1 Equation 9 ECMA-418-2:2024 [F(z)]
+    dfz = np.sqrt(deltaFreq0**2 + (c * bandCentreFreqs)**2) # Section 5.1.4.1 Equation 10 ECMA-418-2:2024 [deltaf(z)]
+    
+    # Block and hop sizes Section 6.2.2 Table 4 ECMA-418-2:2024
+    overlap = 0.75 # block overlap proportion
+    # block sizes [s_b(z)]
+    blockSize = np.concatenate([np.full(3, 8192), np.full(13, 4096), np.full(9, 2048), np.full(28, 1024)])
+    # hop sizes (section 5.1.2 footnote 3 ECMA 418-2:2022) [s_h(z)]
+    hopSize = (1 - overlap) * blockSize
+
+    # Output sample rate based on hop sizes - Resampling to common time basis
+    # Section 6.2.6 ECMA-418-2:2024 [r_sd]    
+    sampleRate1875 = sampleRate48k / np.min(hopSize)
+
+    # Number of bands that need averaging. Section 6.2.3 Table 5
+    # ECMA-418-2:2024 [NB]
+    NBandsAvg = np.array([
+        np.concatenate(([0, 1], np.full(14, 2), np.full(9, 1), np.full(28, 0))),
+        np.concatenate(([1, 1], np.full(14, 2), np.full(9, 1), np.full(28, 0)))
+    ])
+
+    # Critical band interpolation factors from Section 6.2.6 Table 6
+    # ECMA-418-2:2024 [i]
+    i_interp = blockSize / np.min(blockSize)
+
+    # Noise reduction constants from Section 6.2.7 Table 7 ECMA-418-2:2024
+    alpha = 20
+    beta = 0.07
+
+    # Sigmoid function factor parameters Section 6.2.7 Table 8 ECMA-418-2:2024
+    # [c(s_b(z))]
+    csz_b = np.concatenate([np.full(3, 18.21), np.full(13, 12.14),
+                            np.full(9, 417.54), np.full(28, 962.68)])
+    dsz_b = np.concatenate([np.full(3, 0.36), np.full(13, 0.36),
+                            np.full(9, 0.71), np.full(28, 0.69)])
+    
+    # Scaling factor constants from Section 6.2.8 Table 9 ECMA-418-2:2024
+    A = 35
+    B = 0.003
+
+    cal_T = 2.8758615 # calibration factor in Section 6.2.8 Equation 51 ECMA-418-2:2024 [c_T]
+    cal_Tx = 1 / 0.9999043734252 # Adjustment to calibration factor (Footnote 22 ECMA-418-2:2024)
+
+    ## Signal processing
+
+   # Signal processing
+    if fs != sampleRate48k: # Resample signal
+        p_re, fs = shm_resample(insig, fs)
+    else: # don't resample
+        p_re = insig
+
+    # get time vector of input signal
+    timeInsig = np.arange(len(p_re)) / fs # TODO: check.
+
+    # Section 5.1.2 ECMA-418-2:2024 Fade in weighting and zero-padding
+    pn = shm_preproc(p_re, np.max(blockSize), np.max(hopSize))
+
+    ## Apply outer & middle ear filter
+
+    # Section 5.1.3.2 ECMA-418-2:2024 Outer and middle/inner ear signal filtering
+    pn_om = shm_out_mid_ear_filter(pn, fieldtype)
+
+    # Loop through channels in file
+
+    for chan in range(inchans):
+
+        ## Apply auditory filter bank
+
+        # Filter equalised signal using 53 1/2Bark ERB filters according to Section 5.1.4.2 ECMA-418-2:2024
+        pn_omz = shm_auditory_filt_bank(pn_om[:, chan])
+
+        # Autocorrelation function analysis
+        # Duplicate Banded Data for ACF
+        # Averaging occurs over neighbouring bands, to do this the segmentation
+        # needs to be duplicated for neigbouring bands. 'Dupe' has been added
+        # to variables to indicate that the vectors/matrices have been modified
+        # for duplicated neigbouring bands.
+
+        pn_omzDupe = np.concatenate((pn_omz[0:5,:], pn_omz[1:18,:], pn_omz[15:26,:], pn_omz[25:53,:]))
+        blockSizeDupe = np.concatenate((np.full(5, 8192), np.full(17, 4096), np.full(11, 2048), np.full(28, 1024)))
+        bandCentreFreqsDupe = np.concatenate((bandCentreFreqs[0:5],bandCentreFreqs[1:18], bandCentreFreqs[15:26], bandCentreFreqs[25:53]))
+        # (duplicated) indices corresponding with the NB bands around each z band
+        i_NBandsAvgDupe = np.vstack((np.concatenate(([1],[1],[1],np.arange(6, 19), np.arange(23, 32), np.arange(34, 62))),
+                                    np.concatenate(([2],[3],[5], np.arange(10,23), np.arange(25,34), np.arange(34, 62)))))
+        
+        for zBand in range(60, 0, -1):
+
+            # Segmentation into blocks
+
+            # Section 5.1.5 ECMA-418-2:2024
+            i_start = blockSizeDupe[0] - blockSizeDupe[zBand]
+            pn_lz, _ = shm_signal_segment(pn_omzDupe[zBand,:], 0,
+                                          blockSizeDupe[zBand], overlap, i_start)
+            
+            www = 0
+
+    ## CHECKPOINT - TODO: Still check variables.
+
+    return None
 
 # ----------------------
 #### HELPER FUNCTIONS ####
@@ -1124,3 +1251,37 @@ def il_Threshold(f):
     L = 3.64 * f ** -0.8 - 6.5 * np.exp(-0.6 * (f - 3.3) ** 2) + 1e-3 * f ** 4
     return L
 
+def wav2sig(insig, fs=None, dBFS=94):
+    """
+    Load a WAV file and return the signal and sampling frequency.
+    If fs is provided, resample the signal to that frequency.
+    """
+    fs, insig_raw = wavfile.read(insig)
+
+    # Convert to float if needed
+    if insig_raw.dtype.kind in 'iu':
+        max_val = np.iinfo(insig_raw.dtype).max
+        insig = insig_raw.astype(np.float32) / max_val
+    else:
+        insig = insig_raw.astype(np.float32)
+
+    # dBFS scaling (default: 94 dB SPL full scale = 1 Pa)
+    gain_factor = 10 ** ((dBFS - 94) / 20)
+    insig = gain_factor * insig
+
+    # If stereo, convert to mono
+    if insig.ndim > 1:
+        insig = np.mean(insig, axis=1)
+
+    insig = np.asarray(insig)
+
+    return insig, fs
+
+if __name__ == "__main__":
+    # generate test signal for Tonality_ECMA418_2
+    fs = 48000
+    t = np.arange(0, 5, 1/fs)
+    insig = 0.5 * np.sin(2 * np.pi * 440 * t) + 0.25 * np.sin(2 * np.pi * 880 * t)  # Example signal with two tones
+    insig = insig.reshape(-1, 1)  # Reshape to [N, 1] for single channel
+    # Call the Tonality_ECMA418_2 function
+    OUT = Tonality_ECMA418_2(insig, fs, fieldtype='free-frontal', time_skip=0.304, show=True)

@@ -741,7 +741,7 @@ def shm_auditory_filt_bank(signal: np.ndarray, outplot: bool = False) -> np.ndar
     # Signal Processing
     k = 5  # filter order (footnote 5 ECMA‑418‑2)
     e_i = np.array([0, 1, 11, 11, 1], dtype=float)
-    signalFiltered = np.empty((signal.size, halfBark.size), dtype=float)
+    signalFiltered = np.empty((signal.size, halfBark.size), dtype=float).T
     if outplot:
         fig, (ax_mag, ax_phase) = plt.subplots(2, 1, sharex=True, figsize=(9, 6))
         ax_mag.set_xscale("log")
@@ -771,7 +771,7 @@ def shm_auditory_filt_bank(signal: np.ndarray, outplot: bool = False) -> np.ndar
         m = np.arange(0, k)
         b_m = (((1 - d) ** k) / np.sum(e_i[1:] * d ** np.arange(1, k))) * (d ** m) * e_i[:k] * bp[:k]
 
-        signalFiltered[:, zBand] = 2.0 * np.real(lfilter(b_m, a_m, signal))
+        signalFiltered[zBand,:] = 2.0 * np.real(lfilter(b_m, a_m, signal))
         if outplot:
             w, h = freqz(b_m, a_m, worN=10_000, fs=sampleRate48k, whole=True)
             ax_mag.semilogx(w, 20 * np.log10(np.abs(h)))
@@ -806,7 +806,6 @@ def shm_auditory_filt_bank(signal: np.ndarray, outplot: bool = False) -> np.ndar
 
     return signalFiltered
 
-# cross-check compatibility readability checkpoint
 def shm_basis_loudness(
     signalSegmented: np.ndarray,
     bandCentreFreqs: float | None = None,
@@ -1146,7 +1145,7 @@ def shm_preproc(
     signalOut = np.vstack((
         np.zeros((n_zeross, n_ch)),
         signalFade,
-        np.zeros((n_zerose, n_ch))
+        np.zeros((int(n_zerose), n_ch))
     ))
 
     # Restore
@@ -1343,7 +1342,7 @@ def shm_signal_segment(
 
     n_total, nchans = signal.shape
 
-    if i_start < 0 or i_start >= n_total:
+    if i_start < 0:
         raise ValueError("i_start falls outside the signal")
 
     # Truncate
@@ -1356,35 +1355,50 @@ def shm_signal_segment(
         raise ValueError("Signal is too short for the requested blockSize")
 
     n_blocks = int(np.floor((signalTrunc.shape[0] - overlap * blockSize) / hopSize))
-    i_end = n_blocks * hopSize + int(overlap * blockSize)
-    signalTrunc = signalTrunc[:i_end]
+    i_end = (n_blocks * hopSize + int(overlap * blockSize))-1
+    signalTrunc = signalTrunc[:i_end+1]
 
-    # Build Block Matrix
-    windows = sliding_window_view(signalTrunc, window_shape=(blockSize,), axis=0)
-    windows = windows[::hopSize]
-    windows = windows.reshape(-1, blockSize, nchans)
+    signalSegmented_list = []
 
-    if windows.shape[0] != n_blocks:
-        windows = windows[:n_blocks]
+    for chan in range(nchans, 0, -1):
+        
+        signalSegmentedChan = np.concatenate((np.zeros((hopSize, 3)),
+                                              np.reshape(signalTrunc, (hopSize, -1))), axis=1)
 
-    # Tail Block  (optional)
-    iBlocksOut = np.arange(0, n_blocks * hopSize, hopSize, dtype=int)
-    if endShrink and signalTrunc.shape[0] > signalTrunc.shape[0]:
-        tail_start = signalTrunc.shape[0] - blockSize
-        tail_block = signalTrunc[tail_start : tail_start + blockSize]
-        tail_block = tail_block[:, :, None] if tail_block.ndim == 1 else tail_block
-        windows = np.concatenate((windows, tail_block[None, ...]), axis=0)
-        iBlocksOut = np.concatenate((iBlocksOut, [tail_start]))
+        print(signalSegmentedChan)
 
-    # Re-orient
-    # current shape: (n_blocks, block_size, n_chans)
+        # Apply circular shifts and stack like MATLAB circshift
+        signalSegmentedChan = np.concatenate(
+            [
+                np.roll(signalSegmentedChan, 3, axis=1),
+                np.roll(signalSegmentedChan, 2, axis=1),
+                np.roll(signalSegmentedChan, 1, axis=1),
+                np.roll(signalSegmentedChan, 0, axis=1),
+            ],
+            axis=0,
+        )
+        signalSegmentedChan = signalSegmentedChan[:, 6:]
+
+        # Optionally include block of end data
+        if endShrink and signal[i_start:].shape[0] > signalTrunc.shape[0]:
+            tail_start = signal.shape[0] - blockSize
+            tail_block = signal[tail_start:, chan][:, np.newaxis]
+            signalSegmentedChanOut = np.concatenate((signalSegmentedChan, tail_block), axis=1)
+            iBlocksOut = np.concatenate(
+                (np.arange(0, n_blocks * hopSize, hopSize), [tail_start])
+            )
+        else:
+            signalSegmentedChanOut = signalSegmentedChan
+            iBlocksOut = np.arange(0, n_blocks * hopSize, hopSize)
+
+        signalSegmented_list.append(signalSegmentedChanOut)
+
+    # Stack into 3D array: (blockSize, n_blocks, nchans)
+    signalSegmented = np.stack(signalSegmented_list, axis=-1)
+
+    # Re-orient segmented signal to match input
     if axisFlip:
-        signalSegmented = windows.transpose(1, 0, 2)  # (block, n_blocks, chan)
-    else:
-        signalSegmented = windows.transpose(1, 0, 2)  # same orientation
-    # If axisFlip==True, caller expects (n_blocks, block, chan)
-    if axisFlip:
-        signalSegmented = signalSegmented.swapaxes(0, 1)
+        signalSegmented = np.transpose(signalSegmented, (1, 0, 2))
 
     return signalSegmented, iBlocksOut
 
