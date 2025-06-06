@@ -6,6 +6,7 @@ from numpy.typing import NDArray
 from scipy.io import wavfile
 from scipy.signal import resample_poly
 from scipy.fft import fft, ifft
+from scipy.interpolate import interp1d 
 from scipy.signal.windows import hann, blackman
 from matplotlib import pyplot as plt
 
@@ -1325,7 +1326,10 @@ def Roughness_Daniel1997(
         [ 0, 0.35, 0.7, 0.7, 1.1, 1.25, 1.26, 1.18, 1.08, 1, 0.66, 0.46, 0.38, 0.3 ]
     ])
 
-    gzi = np.sqrt(np.interp(np.arange(1, 48, 1) / 2, gr[0], gr[1]))
+    xi   = np.arange(1, 48) / 2
+    cubic = interp1d(gr[0], gr[1], kind='cubic',   # same spline as MATLAB
+                 bounds_error=False, fill_value=np.nan)
+    gzi  = np.sqrt(cubic(xi))
 
     # calculate a0
     a0tab = np.array([
@@ -1492,13 +1496,13 @@ def Roughness_Daniel1997(
 
     ## BEGIN process window
 
-    AmpCal = db2mag(91.2) * 2.0 / (N * window.mean())
+    AmpCal  = db2mag(91.2)*2/(N*blackman(N, sym=False).mean())
 
     # Calibration between wav-level and loudness-level (assuming blackman window and FFT will follow)
     Chno = 47  # number of channels
     Cal  = 0.50  # calibration factor, twice the old value (0.25)
     qb = np.arange(N0, Ntop + 1, 1)
-    freqs = (qb + 1) * fs / N # TODO: potential conflict?
+    freqs = (qb+2) * fs / N # TODO: potential conflict?
     hBPi  = np.zeros((Chno, N))
     hBPrms = np.zeros(Chno)
     mdept  = np.zeros(Chno)
@@ -1525,10 +1529,9 @@ def Roughness_Daniel1997(
 
         # Calculate Excitation Patterns
         TempIn = AmpCal * dataIn
-        TempIn = a0 * fft(TempIn)
+        TempIn = a0 * fft(TempIn, axis=0)
         Lg     = np.abs(TempIn[qb]) # get absolute value of fourier transform for  indices in range of human hearing
         LdB    = mag2db(Lg)
-
         whichL = np.nonzero(LdB > MinExcdB)[0] # extract indices where FFT magnitudes exceed excitation threshold
         sizL   = whichL.size # get number of frequencies where this holds
 
@@ -1546,10 +1549,10 @@ def Roughness_Daniel1997(
         S1 = -27.0
         S2 = np.zeros(sizL) # preallocate
 
-        for w, idx in enumerate(whichL):
+        for w in range(sizL):
 
             # Steepness of upper slope [dB/Bark] in accordance with Terhardt
-            steep = -24.0 - (230.0 / freqs[idx]) + 0.2 * LdB[idx]
+            steep = -24.0 - (230.0 / freqs[w]) + 0.2 * LdB[whichL[w]]
 
             if steep < 0:
                 S2[w] = steep # set S2 with steepness value calculated earlier
@@ -1588,14 +1591,14 @@ def Roughness_Daniel1997(
                     ExcAmp[l, k_ch] = Slopes[l, k_ch + 1] / Lg[N1tmp]
                 else:
                     ExcAmp[l, k_ch] = Slopes[l, k_ch - 1] / Lg[N1tmp]
-                etmp[N1tmp + N01] = ExcAmp[l, k_ch] * TempIn[N1tmp + N01]
+                etmp[N1tmp] = ExcAmp[l, k_ch] * TempIn[N1tmp]
 
             # this is the specific excitation time function
-            ei[k_ch, :] = N * np.real(ifft(etmp, n=N)) # ifft to get time domain blocks of signal
+            ei[k_ch, :] = N * np.real(ifft(etmp)) # ifft to get time domain blocks of signal
             etmp_abs = np.abs(ei[k_ch, :])
             h0 = etmp_abs.mean()
-            Fei[k_ch, :] = fft(etmp_abs - h0, n=N)
-            hBPi[k_ch, :] = 2 * np.real(ifft(Fei[k_ch, :] * Hweight[k_ch, :], n=N))
+            Fei[k_ch, :] = fft(etmp_abs - h0)
+            hBPi[k_ch, :] = 2 * np.real(ifft(Fei[k_ch, :] * Hweight[k_ch, :]))
             hBPrms[k_ch] = float(np.sqrt(np.mean(np.square(hBPi[k_ch, :], dtype=float), dtype=float)))
 
             if h0 > 0:
