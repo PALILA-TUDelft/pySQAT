@@ -1037,7 +1037,6 @@ def get_PNLT(input, freq_bands, PNL):
     
     return PNLT, PNLTM, PNLTM_idx, OUT
 
-
 # ---------------------------
 #### ECMA418_2 FUNCTIONS ####
 # ---------------------------

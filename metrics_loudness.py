@@ -13,11 +13,10 @@ from scipy.signal import resample
 import warnings
 import sys
 
-from sound_metrics import ob13_iso532_1
-
+from sound_metrics import *
 from utilities import *
 
-__all__ = ["Loudness_ISO532_1", "Tonality_Aures1985"]
+__all__ = ["Loudness_ISO532_1", "EPNL_FAR_Part36"]
 FloatArray = NDArray[np.floating]
 
 # ----------------------
@@ -1059,22 +1058,20 @@ def EPNL_FAR_Part36(insig=None, fs=None, method=None, dt=None, threshold=None, s
 check_which = 0
 
 if __name__ == "__main__":
-    if check_which == 0:
+    if check_which == 0: # NO TEST
 
         print("metrics_loudness.py")
 
-    if check_which == 1:
-
-        print("Running Loudness_ISO532_1 test...")
+    if check_which == 1: # Loudness_ISO532_1
 
         """
-        Validation clip for for Loudness_ISO532_1
+        Validation clip for Loudness_ISO532_1
         -----------------------------------
 
         Generates a 5-second, 1 kHz sinusoid at 70 dB SPL, sampled at 48 kHz.
         """
 
-        import numpy as np
+        print("Running Loudness_ISO532_1 test...")
 
         # ------------------------------------------------------------
         # 1.  Build a calibrated test signal
@@ -1118,9 +1115,7 @@ if __name__ == "__main__":
         print(f"95-percentile loudness N95: {OUT['N95']} sone")
         print(f"Loudness level (median):   {np.median(OUT['InstantaneousLoudnessLevel'])} phon")
 
-    elif check_which == 2:
-
-        print("Running EPNL_FAR_Part36 test...")
+    elif check_which == 2: # EPNL_FAR_Part36
 
         """
         Validation clip for EPNL_FAR_Part36
@@ -1134,6 +1129,8 @@ if __name__ == "__main__":
         (method 1, dt = 0.5 s, threshold = 10 dB), prints the resulting EPNL
         and shows the built-in diagnostic plots.
         """
+        
+        print("Running EPNL_FAR_Part36 test...")
 
         # ---------------------------------------------------------------------
         # 1.  Parameters & helpers

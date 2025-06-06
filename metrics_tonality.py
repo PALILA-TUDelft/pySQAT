@@ -10,286 +10,341 @@ from scipy.fft import fft, ifft
 from scipy.signal.windows import hann, blackman
 from matplotlib import pyplot as plt
 
-from sound_metrics import ob13_iso532_1
-from metrics_loudness import Loudness_ISO532_1
-
+from sound_metrics import *
 from utilities import *
 
-__all__ = ["Loudness_ISO532_1", "Tonality_Aures1985"]
+from metrics_loudness import Loudness_ISO532_1
+
+__all__ = ["Tonality_Aures1985"]
 FloatArray = NDArray[np.floating]
 
 # ----------------------
 #### TONALITY METRICS ####
 # ----------------------
 
-def Tonality_Aures1985(insig, fs=None, LoudnessField=0, time_skip=0, show=False, dBFS=94):
-    """
-    Implements the Aures (1985) tonality metric based on Terhardt's virtual pitch theory.
 
-    Parameters:
-    - insig: Input signal (array, monophonic in Pa).
-    - fs: Sampling frequency (Hz).
-    - LoudnessField: Field for loudness calculation (0 = free field, 1 = diffuse field).
-    - time_skip: Time to skip at the start of the signal for statistical calculations (seconds).
-    - show: Whether to display plots (default: False).
+def Tonality_Aures1985(insig, fs, LoudnessField, time_skip, show=None):
 
-    Returns:
-    - OUT: Dictionary containing tonality metrics and statistics.
-    """
-
-    # --- WAV file interface ---
-    if isinstance(insig, str):
-        insig, fs = wav2sig(insig, fs, dBFS)
-
-    elif fs is None:
-        raise ValueError("If insig is not a filename, fs must be provided.")
-
-    ## resampling ------------------------------------------------------
-
-    # resampling audo to 44.1 kHz or 48kHz
-    if fs not in [44100, 48000]:
-        gcd_fs = np.gcd(44100, fs) # greatest common denominator
-        insig = resample_poly(insig, 44100 // gcd_fs, fs // gcd_fs)
+    if show is None:
+        # If no return value is expected, show plots
+        show = 1  # Assuming nargout equivalent is handled by caller
+    
+    ## resampling
+    # resampling audio to 44.1 kHz or 48kHz
+    if not (fs == 44100 or fs == 48000):
+        gcd_fs = np.gcd(44100, fs)  # greatest common denominator
+        insig = resample_poly(insig, 44100//gcd_fs, fs//gcd_fs)
         fs = 44100
-
-    # Window parameters
+    
+    ## window parameters
+    
+    # time_resolution=80e-3;    # window length fixed in 80 ms (Terhard), gives a df=12.5 Hz
     time_resolution = 160e-3  # window length fixed in 160 ms, gives a df=6.25 Hz
-
+    
     N = round(fs * time_resolution)  # define window length, N bins
     window = hann(N)
-
-    fftgain = np.sqrt(2) / (N * np.mean(window))
-
-    ## freq vectors based on window input signals -------------------------
-
+    
+    fftgain = np.sqrt(2) / (N * np.mean(hann(N)))  # gain to be applied based on the FFT length
+    
+    ## freq vectors based on window input signals
+    
     # from Terhardt [3]: Aurally relevant tonal information of any signal is
-    # confined in the frequency region of about 20 Hz to 5 kHz.
-
+    #  confined in the frequency region of about 20 Hz to 5 kHz.
+    
     MinFrequency = 20
-    MinFrequencyindex = int(np.ceil(1 + (MinFrequency * (N / fs)))-1) # index corresponding to min frequency (20 Hz) for tone extraction
-
+    MinFrequencyindex = int(np.ceil(1 + (MinFrequency * (N / fs))))  # index corresponding to min frequency (20 Hz) for tone extraction
+    
     MaxFrequency = 5000
-    MaxFrequencyIndex = int(np.ceil(1 + (MaxFrequency * (N / fs)))-1) # index corresponding to max frequency (5 kHz) for tone extraction
-
-    Freq = fs * (np.arange(1, round(N) + 1) - 1) / N # freq vector
-    FreqCrop = Freq[MinFrequencyindex:MaxFrequencyIndex+1] # croped freq vector from MinFrequencyindex till MaxFrequencyIndex
-    df = FreqCrop[1] - FreqCrop[0] # freq discretization
-
-    ## Initialize windowed vectors
-
-    t_b = np.arange(1, len(insig) + 1) / fs # time vector
-
-    overlap = round(0.5 * N) # overlap 
-    hop_size = N - overlap
-
-    insig = np.lib.stride_tricks.sliding_window_view(insig, N)[::hop_size]
-    t_b = np.lib.stride_tricks.sliding_window_view(t_b, N)[::hop_size]
-
-    # Verify the shape of insig
-    if insig.ndim != 2:
-        raise ValueError(f"Expected insig to be 2D after segmentation, but got shape {insig.shape}")
-
-    nFrames = insig.shape[0] - 1
-
-    tone = [None] * nFrames # Memory allocation: tone cell per time frame
-    tonality = np.zeros(nFrames) # Memory allocation for tonality computation
-    t = np.zeros(nFrames) # Memory allocation: time vector for iFrames
-    w_gr = np.zeros(nFrames) # Memory allocation: loudness weighting function per time frame
-    w_tonal = np.zeros(nFrames) # Memory allocation: tonal weighting function per time frame
+    MaxFrequencyIndex = int(np.ceil(1 + (MaxFrequency * (N / fs))))  # index corresponding to max frequency (5 kHz) for tone extraction
+    
+    Freq = fs * (np.arange(1, round(N) + 1) - 1) / N  # freq vector
+    FreqCrop = Freq[MinFrequencyindex-1:MaxFrequencyIndex]  # cropped freq vector from MinFrequencyindex till MaxFrequencyIndex
+    df = FreqCrop[1] - FreqCrop[0]  # freq discretization
+    
+    ## initialize windowed vectors
+    
+    t_b = (np.arange(1, len(insig) + 1)) / fs  # time vector
+    
+    overlap = round(0.5 * N)  # overlap
+    
+    insig = buffer(insig, N, overlap, 'nodelay')
+    t_b = buffer(t_b, N, overlap, 'nodelay')
+    
+    nFrames = insig.shape[1] - 1
+    
+    tone = [None] * nFrames  # Memory allocation: tone cell per time frame
+    tonality = np.zeros(nFrames)  # Memory allocation for tonality computation
+    t = np.zeros(nFrames)  # Memory allocation: time vector for iFrames
+    w_gr = np.zeros(nFrames)  # Memory allocation: loudness weighting function per time frame
+    w_tonal = np.zeros(nFrames)  # Memory allocation: tonal weighting function per time frame
     TINY_VALUE = 1e-99
-
-    ## Main processing loop
-
+    
+    ## Here we go ...
+    
     for iFrame in range(nFrames):
-
-        ## windowed time-frame
-        Winsig = insig[iFrame] * window # cut insig for each iFrames & Apply window to frame
-        t[iFrame] = t_b[iFrame,0] # output time vector for iFrames
-
-        ## Compute SPL for each time-frame
-        SpectralEnergy = np.abs(fft(Winsig * fftgain)) ** 2
-        SPL = 10 * np.log10((SpectralEnergy + TINY_VALUE) / 4e-10) # dBSPL 
-
-        ## Find peaks according to Terhard's criteria for each time-frame
-
-        SPLcrop = SPL[MinFrequencyindex:MaxFrequencyIndex+1] # crop SPL vector from MinFrequencyindex to MaxFrequencyIndex
-
-        threshold = 7 # condition for tonal component, in dBSPL
-
-        ToneIdx = [] # initialize vector, tonal components idx
         
-        # find tones
-        for i in range(4, len(SPLcrop) - 2):
-            if (
-                SPLcrop[i] > SPLcrop[i - 1] # first condition
-                and SPLcrop[i] >= SPLcrop[i + 1]
-                and SPLcrop[i] - SPLcrop[i - 3] >= threshold # second condition
-                and SPLcrop[i] - SPLcrop[i - 2] >= threshold
-                and SPLcrop[i] - SPLcrop[i + 2] >= threshold
-                and SPLcrop[i] - SPLcrop[i + 3] >= threshold
-            ):
-                ToneIdx.append(i)
-
-        # Save tone information
-        ToneIdx = np.array(ToneIdx)
-        ToneIdx = ToneIdx[ToneIdx > 0]  # Remove zeros from ToneIdx
+        ## windowed time-frame
+        
+        Winsig = insig[:, iFrame]  # cut insig for each iFrames
+        
+        t[iFrame] = t_b[0, iFrame]  # output time vector for iFrames
+        
+        Winsig = window * Winsig  # Apply window to frame
+        
+        ## compute SPL for each time-frame
+        
+        SpectralEnergy = np.abs(fft(Winsig * fftgain)) ** 2
+        SPL = 10.0 * np.log10((SpectralEnergy + TINY_VALUE) / 4e-10)  # dBSPL
+        
+        ## Find peaks according to Terhard's criteria for each time-frame
+        
+        SPLcrop = SPL[MinFrequencyindex-1:MaxFrequencyIndex]  # crop SPL vector from MinFrequencyindex to MaxFrequencyIndex
+        
+        threshold = 7  # condition for tonal component, in dBSPL
+        
+        ToneIdx = np.zeros(len(SPLcrop), dtype=int)  # initialize vector, tonal components idx
+        k = 0  # initialize counter (using 0-based indexing)
+        
+        # find tones...
+        for i in range(3, len(SPLcrop) - 3):  # 4:(length(SPLcrop)-3) in Matlab (1-based) becomes 3:(len-3) in Python (0-based)
+            
+            if (SPLcrop[i] > SPLcrop[i-1] and
+                SPLcrop[i] >= SPLcrop[i+1] and
+                SPLcrop[i] - SPLcrop[i-3] >= threshold and
+                SPLcrop[i] - SPLcrop[i-2] >= threshold and
+                SPLcrop[i] - SPLcrop[i+2] >= threshold and
+                SPLcrop[i] - SPLcrop[i+3] >= threshold):
+                
+                ToneIdx[k] = i  # get the idx of the tones on Lcrop
+                k = k + 1
+        
+        # save tone information
+        ToneIdx = ToneIdx[ToneIdx != 0]  # if no tones were found, ToneIdx shall remain empty
         ToneL = SPLcrop[ToneIdx]  # SPL of the tones
-        ToneF = FreqCrop[ToneIdx]  # Central frequency of the tones
-
-        # Estimate bandwidth of the i-th tone using half-power (-3 dB decay) criteria
-        flow = np.zeros(len(ToneIdx))  # Memory allocation for low frequency
-        fhigh = np.zeros(len(ToneIdx))  # Memory allocation for high frequency
-        BW = np.zeros(len(ToneIdx))  # Memory allocation for bandwidth
-
-        for i in range(len(ToneIdx)):
+        NTones = np.where(ToneIdx)[0]  # number of tones
+        ToneF = FreqCrop[ToneIdx]  # central freq of the tone
+        
+        # estimate bandwidth of the i-th tone using half-power (-3 dB decay) criteria (this analysis is made on the full SPL and freq vectors)
+        flow = np.zeros(len(NTones))  # declare variable for memory allocation
+        fhigh = np.zeros(len(NTones))
+        BW = np.zeros(len(NTones))
+        
+        for i in range(len(NTones)):  # Source: https://de.mathworks.com/matlabcentral/answers/1441689-i-am-trying-to-find-the-full-width-at-half-max-value-and-plot-the-waveform-with-markers?s_tid=srchtitle
+            
             ymx = ToneL[i]  # SPL of the i-th tone
-            idx = np.argmin(np.abs(Freq - ToneF[i]))  # Index of the i-th tone
-            hafmax = ymx * 0.707  # Target value
-
-            # Find the lower frequency index
-            idxrng1_candidates = np.where(SPL[:idx] < hafmax)[0]
-            idxrng1 = idxrng1_candidates[-1] if len(idxrng1_candidates) > 0 else None
-
-            if idxrng1 is None or idxrng1 < 4:
-                idxrng1 = 4  # Truncate idxrng1 to 4 if it's empty or too low
-
-            # Find the upper frequency index
-            idxrng2_candidates = np.where(SPL[idx + 1:len(Freq)+1] < hafmax)[0]
-            idxrng2 = idxrng2_candidates[0] + idx if len(idxrng2_candidates) > 0 else None
-
-            # Interpolate frequencies for low and high bounds
-            flow[i] = np.interp(hafmax, SPL[idxrng1:idxrng1 + 2], Freq[idxrng1:idxrng1 + 2])
-            fhigh[i] = np.interp(hafmax, SPL[idxrng2 - 1:idxrng2 + 1], Freq[idxrng2 - 1:idxrng2 + 1])
-
-            # Calculate bandwidth
-            BW[i] = fhigh[i] - flow[i]
-            BW *= 2 # WARNING! soft fix
-
-            # Handle edge cases for bandwidth
-            if BW[i] == 0:
-                BW[i] = 1  # If BW is zero, truncate to 1
-
-        # Replace inf and NaN values in BW
-        BW[np.isinf(BW) | np.isnan(BW)] = 1
-
-
+            idx = np.argmin(np.abs(Freq - ToneF[i]))  # index of the i-th tone
+            hafmax = ymx * 0.707  # target value
+            # hafmax = ymx-3  # target value (-3 dB decay)
+            
+            idxrng1_candidates = np.where(SPL[:idx+1] < hafmax)[0]
+            if len(idxrng1_candidates) == 0 or idxrng1_candidates[-1] < 3:  # if idxrng1 is empty, it means hafmax is below the 1st bin of the signal (probably due to a low freq tone with large bandwidth)
+                idxrng1 = 3  # in this case, truncate idxrng1 to 4 (3 in 0-based)
+            else:
+                idxrng1 = idxrng1_candidates[-1]
+            
+            idxrng2_candidates = np.where(SPL[idx+1:] < hafmax)[0]
+            if len(idxrng2_candidates) == 0:
+                idxrng2 = len(Freq) - 1
+            else:
+                idxrng2 = idxrng2_candidates[0] + idx + 1
+            
+            flow[i] = np.interp(hafmax, SPL[idxrng1:idxrng1+2], Freq[idxrng1:idxrng1+2])  # low freq of the band
+            fhigh[i] = np.interp(hafmax, SPL[idxrng2-1:idxrng2+1], Freq[idxrng2-1:idxrng2+1])  # high freq of the band
+            
+            BW[i] = fhigh[i] - flow[i]  # tone's bandwidth
+            
+            if BW[i] == 0:  # if BW is zero, truncate BW to 1
+                BW[i] = 1
+        
+        BW[np.isinf(BW) | np.isnan(BW)] = 1  # replace inf and NaN
+        
         if len(ToneIdx) == 0:  # if ToneRef is empty, then there are no tones for this time-frame
             
-            ## Outputs for this case
-
-            w_tonal[iFrame] = 0  # Tonal weighting
-            w_gr[iFrame] = 0  # Loudness weighting
-            tonality[iFrame] = 0  # Tonality
-
-        else:  # If tones are found
-
-            idx = np.where(ToneL > 0)[0] # find idx of only positive levels
-            ToneIdx = ToneIdx[idx] # idx of the tone
-            ToneL = ToneL[idx] # SPL of the tones
-            ToneF = ToneF[idx] #  central freq of the tone
-            BW = BW[idx] # bandwidth
-
-            ## Filtering out the tones from the signal
-            y = insig[iFrame, :]  # get insig for each iFrames
-            insigSpectrum = np.fft.fft(y)  # spectrum of insig for each iFrames
-            SingleSidedinsigSpectrum = insigSpectrum[:int(np.ceil((len(insigSpectrum)+1)/ 2))] # single-sided spectrum of insig for each iFrames
-            FreqSingleSidedinsigSpectrum = np.linspace(0, fs / 2, len(SingleSidedinsigSpectrum)) # freq vector of single-sided spectrum of insig for each iFrames
-
-            for i in range(len(ToneF)):  # Loop across tones
-
-                index_low = np.where(FreqSingleSidedinsigSpectrum >= (ToneF[i] - BW[i] / 2))[0][0] # find idx of i-th tone's lower freq
-                index_up = np.where(FreqSingleSidedinsigSpectrum >= (ToneF[i] + BW[i] / 2))[0][0] # find idx of i-th tone's upper freq
-
-                if index_low == 0: # may happen with low-freq tones with large bandwidth
-                    magn = 0.5 * (np.abs(SingleSidedinsigSpectrum[index_low]) + # create a magnitude vector
-                                np.abs(SingleSidedinsigSpectrum[index_up + 1]))
-                else:
-                    magn = 0.5 * (np.abs(SingleSidedinsigSpectrum[index_low - 1]) + # create a magnitude vector
-                                np.abs(SingleSidedinsigSpectrum[index_up + 1]))
-
-                phase = (np.random.rand(index_up - index_low + 1) - 0.5) * 2 * np.pi # create random phase vector
-                SingleSidedinsigSpectrum[index_low:index_up + 1] = magn * np.exp(1j * phase) # replace tones
-
-            doubleSideFilteredSpectrum = np.concatenate( # double-side the filtered spectrum
-                [SingleSidedinsigSpectrum, np.conj(SingleSidedinsigSpectrum[-2:0:-1])]) # get filtered signal in time-domain
-            filtered_signal = np.fft.ifft(doubleSideFilteredSpectrum).real
-
-            # Compute w_gr (loudness weighting)
-            L_total = Loudness_ISO532_1(y, fs,
-                                        LoudnessField,
-                                        1,
-                                        time_resolution * 0.05,
-                                        False)
-            L_filtered = Loudness_ISO532_1(filtered_signal, fs,
-                                           LoudnessField,
-                                           1,
-                                           time_resolution * 0.05,
-                                           False)
-
-            # loudness weighting per time frame
-            w_gr[iFrame] = 1 - (L_filtered["Loudness"] / L_total["Loudness"])
-            if w_gr[iFrame] < 0:
-                w_gr[iFrame] = 0
-
-            # Compute tonal weighting
-            tone[iFrame] = {
-                "Lcrop": SPLcrop, # SPL of the spectrum - SPLcrop = SPL(MinFrequencyindex:MaxFrequencyIndex);
-                "freq": FreqCrop, # frequency vector - freq = freq_all(MinFrequencyindex:MaxFrequencyIndex);
-                "ToneF": ToneF, # ToneF: central frequency of the tones
-                "ToneL": ToneL, # ToneF: central frequency of the tones
-                "BW": BW, # bandwidth of the tones
-                "df": df, # freq discretization
-            }
-            tone[iFrame]["LX"] = il_SPL_excess(tone[iFrame]) # Sound pressure excess calculation (define aurally relevance of the tones)
+            ## OUTPUTS for this case
             
-            w_tonal[iFrame] = il_tonal_weighting(tone[iFrame]) # Tonal weighting
-
-            ## TONALITY
-
-            C = 1.125  # is a constant such that 1 kHz pure tone with a level of 60 dB would have a tonalness of 1, which for an ideal implementaiton should be =1.09
-            tonality[iFrame] = abs(C * w_tonal[iFrame] ** 0.29 * w_gr[iFrame] ** 0.79)
-
-    ## Output data
-    OUT = {
-        "InstantaneousTonality": tonality, # instantaneous tonality
-        "TonalWeighting": w_tonal, # instantaneous tonal weighting
-        "LoudnessWeighting": w_gr, # instantaneous loudness weighting
-        "time": t, # time vector
-    }
-
-    # get statistics from Time-varying tonality
-    idx = np.argmin(np.abs(OUT["time"] - time_skip)) # find idx of time_skip on time vector
+            w_tonal[iFrame] = 0  # Tonal weighting
+            w_gr[iFrame] = 0  # loudness weighting
+            tonality[iFrame] = 0  # tonality
+            
+        else:  # if tones were found ...
+            
+            idx = np.where(ToneL > 0)[0]  # find idx of only positive levels (i.e.,
+                                         #   tones with SPL above 0 dB) - necessary 
+                                         #   because resampling may introduce several 
+                                         #   tones with very low amplitude
+            ToneIdx = ToneIdx[idx]  # idx of the tone
+            ToneL = ToneL[idx]  # SPL of the tones
+            NTones = NTones[idx]  # number of tones
+            ToneF = ToneF[idx]  # central freq of the tone
+            BW = BW[idx]  # bandwidth
+            
+            if len(ToneIdx) == 0:  # if ToneRef is empty (there are no tonal
+                                  # components with SPL>0 dB), then there are 
+                                  # no tones for this time-frame
+                ## OUTPUTS for this case
+                w_tonal[iFrame] = 0  # Tonal weighting
+                w_gr[iFrame] = 0  # loudness weighting
+                tonality[iFrame] = 0  # tonality
+                
+            else:  # if tones were found and their SPL is above 0 dB ...
+                
+                ## filtering out the tones from the signal
+                
+                y = insig[:, iFrame]  # get insig for each iFrames
+                
+                insigSpectrum = fft(y)  # spectrum of insig for each iFrames
+                
+                SingleSidedinsigSpectrum = insigSpectrum[:int(np.ceil((len(insigSpectrum) + 1) / 2))]  # single-sided spectrum of insig for each iFrames
+                
+                FreqSingleSidedinsigSpectrum = np.arange(0, fs/2 + fs/len(y), fs/len(y))  # freq vector of single-sided spectrum of insig for each iFrames
+                if len(FreqSingleSidedinsigSpectrum) > len(SingleSidedinsigSpectrum):
+                    FreqSingleSidedinsigSpectrum = FreqSingleSidedinsigSpectrum[:len(SingleSidedinsigSpectrum)]
+                
+                for i in range(len(NTones)):  # loop across tones
+                    
+                    index_low_candidates = np.where(FreqSingleSidedinsigSpectrum >= (ToneF[i] - (BW[i] / 2)))[0]
+                    index_low = index_low_candidates[0] if len(index_low_candidates) > 0 else None  # find idx of i-th tone's lower freq
+                    
+                    index_up_candidates = np.where(FreqSingleSidedinsigSpectrum >= (ToneF[i] + (BW[i] / 2)))[0]
+                    index_up = index_up_candidates[0] if len(index_up_candidates) > 0 else None  # find idx of i-th tone's upper freq
+                    
+                    if index_low is None:
+                        index_low = 0
+                    
+                    if index_up is None:
+                        index_up = len(FreqSingleSidedinsigSpectrum) - 1
+                    
+                    if index_low == 0:  # may happen with low-freq tones with large bandwidth
+                        magn = 0.5 * (np.abs(SingleSidedinsigSpectrum[index_low]) + np.abs(SingleSidedinsigSpectrum[index_up + 1]))  # create a magnitude vector
+                    else:
+                        magn = 0.5 * (np.abs(SingleSidedinsigSpectrum[index_low - 1]) + np.abs(SingleSidedinsigSpectrum[index_up + 1]))  # create a magnitude vector
+                    
+                    phase = (np.random.rand(index_up - index_low + 1) - 0.5) * np.pi * 2  # create random phase vector
+                    SingleSidedinsigSpectrum[index_low:index_up + 1] = magn * np.exp(1j * phase)  # replace tones
+                
+                doubleSideFilteredSpectrum = np.concatenate([SingleSidedinsigSpectrum, np.conj(np.flip(SingleSidedinsigSpectrum[1:-1]))])  # double-side the filtered spectrum
+                
+                filtered_signal = ifft(doubleSideFilteredSpectrum).real  # get filtered signal in time-domain
+                
+                ## Compute w_gr (loudness weighting)
+                
+                # compute loudness from input signal 
+                # assume a stationary loudness within iFrame
+                
+                L_total = Loudness_ISO532_1(y, fs,   # input signal and sampling freq.
+                                LoudnessField,       # field; free field = 0; diffuse field = 1;
+                                            1,       # method; stationary (from input 1/3 octave unweighted SPL)=0; stationary = 1; time varying = 2;
+                         time_resolution*0.05,       # time_skip, in seconds for level (stationary signals) and statistics (stationary and time-varying signals) calculations
+                                            0)       # show results; 0=no, 1=yes
+                
+                # compute loudness of the filtered signal (i.e. input signal with tones removed) 
+                # assume a stationary loudness within the iFrame
+                
+                L_filtered = Loudness_ISO532_1(filtered_signal,fs,   # input signal and sampling freq.
+                                                LoudnessField,       # field; free field = 0; diffuse field = 1;
+                                                            1,       # method; stationary (from input 1/3 octave unweighted SPL)=0; stationary = 1; time varying = 2;
+                                         time_resolution*0.05,       # time_skip, in seconds for level (stationary signals) and statistics (stationary and time-varying signals) calculations
+                                                            0)       # show results; 0=no, 1=yes
+                
+                # loudness weighting per time frame
+                w_gr[iFrame] = 1 - (L_filtered.get('Loudness', 1.0) / L_total.get('Loudness', 1.0)) # Use .get with default to avoid KeyError if Loudness is missing
+                
+                #	Note: On rare occasions, it is possible for the Loudness of Noise to be greater
+                #   than the total Loudness.  This occurs because filtering the tones may slightly
+                #	elevate the noise.  If the signal is almost all noise, then this may push it
+                #	higher.  If this happens, then the signal should not be considered tonal,
+                #	therefore, for this case set Wgr == 0.
+                
+                if w_gr[iFrame] < 0:
+                    w_gr[iFrame] = 0
+                
+                #clear y insigSpectrum SingleSidedinsigSpectrum
+                #clear FreqSingleSidedinsigSpectrum doubleSideSpectrum filtered_signal
+                
+                ## Compute tonal weighting
+                
+                tone[iFrame] = {
+                    'Lcrop': SPLcrop,  #  SPL of the spectrum - SPLcrop = SPL(MinFrequencyindex:MaxFrequencyIndex);
+                    'freq': FreqCrop,  #  frequency vector - freq = freq_all(MinFrequencyindex:MaxFrequencyindex);
+                    'ToneF': ToneF,    #  ToneF: central frequency of the tones
+                    'ToneL': ToneL,    #  ToneF: central frequency of the tones
+                    'BW': BW,          #  bandwidth of the tones
+                    'df': df           #  freq discretization
+                }
+                
+                tone[iFrame]['LX'] = il_SPL_excess(tone[iFrame])  #  Sound pressure excess calculation (define aurally relevance of the tones)
+                
+                w_tonal[iFrame] = il_tonal_weighting(tone[iFrame])  # Tonal weighting
+                
+                ## TONALITY
+                
+                C = 1.125  # is a constant such that 1 kHz pure tone with a level of 60 dB would have a tonalness of 1, which for an ideal implementaiton should be =1.09
+                
+                tonality[iFrame] = abs(C * (w_tonal[iFrame] ** 0.29) * (w_gr[iFrame] ** 0.79))
     
-    metric_statistics = "Tonality_Aures1985"
-    OUT_statistics = get_statistics(tonality[idx:], metric_statistics) # get statistics
-    OUT.update(OUT_statistics)
-
-    # Plots
-    if show:
-        plt.figure("Aures tonality analysis", figsize=(16, 8))
+    ###########################################################################
+    # Output Data
+    
+    # main output results
+    OUT = {
+        'InstantaneousTonality': tonality,  # instantaneous tonality
+        'TonalWeighting': w_tonal,          # instantaneous tonal weighting
+        'LoudnessWeighting': w_gr,          # instantaneous loudness weighting
+        'time': t                           # time vector
+    }
+    
+    # get statistics from Time-varying tonality
+    #####################################
+    
+    idx = np.argmin(np.abs(OUT['time'] - time_skip))  # find idx of time_skip on time vector
+    
+    metric_statistics = 'Tonality_Aures1985'
+    OUT_statistics = get_statistics(tonality[idx:], metric_statistics)  # get statistics
+    
+    # copy fields of <OUT_statistics> dict into the <OUT> dict
+    for field_name in OUT_statistics.keys():
+        if field_name not in OUT:  # Only copy if OUT does NOT already have this field
+            OUT[field_name] = OUT_statistics[field_name]
+    
+    #clear OUT_statistics metric_statistics fields_OUT_statistics fieldName;
+    #####################################
+    
+    ###########################################################################
+    ## plots
+    
+    if show == True:
+        
+        fig = plt.figure(figsize=(12, 10))
+        fig.suptitle('Aures tonality analysis')
+        
+        ###
         plt.subplot(3, 1, 1)
         plt.plot(t, tonality)
-        plt.title("Instantaneous tonality")
-        plt.ylabel("Aures tonality, K (t.u.)")
-        plt.xlabel("Time, t (s)")
+        plt.title('Instantaneous tonality')
+        plt.ylabel('Aures tonality, $K$ (t.u.)')
+        plt.xlabel('Time, $t$ (s)')
         plt.ylim([0, 1.1])
-
+        
+        ###
         plt.subplot(3, 1, 2)
-        plt.plot(t, w_gr, "k")
-        plt.title("Loudness weighting")
-        plt.ylabel("Loudness weighting, W_Loudness")
-        plt.xlabel("Time, t (s)")
+        plt.plot(t, w_gr, 'k')
+        plt.title('Loudness weighting')
+        plt.ylabel('Loudness weighting, $W_{\\mathrm{Loudness}}$')
+        plt.xlabel('Time, $t$ (s)')
         plt.ylim([0, 1.1])
-
+        
+        ###
         plt.subplot(3, 1, 3)
-        plt.plot(t, w_tonal, "k")
-        plt.title("Tonal weighting")
-        plt.ylabel("Tonal weighting, W_Tonal")
-        plt.xlabel("Time, t (s)")
+        
+        plt.plot(t, w_tonal, 'k')
+        plt.title('Tonal weighting')
+        plt.ylabel('Tonal weighting, $W_{\\mathrm{Tonal}}$')
+        plt.xlabel('Time, $t$ (s)')
         plt.ylim([0, 1.1])
-
+        
         plt.tight_layout()
         plt.show()
+    
     return OUT
 
 def Tonality_ECMA418_2(insig, fs, fieldtype='free-frontal', time_skip=0.304, show=False):
@@ -435,114 +490,214 @@ def Tonality_ECMA418_2(insig, fs, fieldtype='free-frontal', time_skip=0.304, sho
 #### HELPER FUNCTIONS ####
 # ----------------------
 
-def il_SPL_excess(input):
+def buffer(x, n, p=0, opt='nodelay'):
     """
-    Compute sound pressure level excess for tonal components.
+    Matlab-like buffer function implementation
     """
+    if opt == 'nodelay':
+        # Calculate number of columns
+        if p == 0:
+            # No overlap
+            cols = len(x) // n
+            # Truncate x to fit exactly
+            x_truncated = x[:cols * n]
+            return x_truncated.reshape((n, cols), order='F')
+        else:
+            # With overlap
+            step = n - p
+            if step <= 0:
+                raise ValueError("Overlap must be less than frame length")
+            
+            # Calculate number of frames
+            cols = (len(x) - p) // step
+            if cols <= 0:
+                cols = 1
+            
+            # Create buffered array
+            buffered = np.zeros((n, cols))
+            for i in range(cols):
+                start = i * step
+                end = start + n
+                if end <= len(x):
+                    buffered[:, i] = x[start:end]
+                else:
+                    # Pad with zeros if necessary
+                    remaining = len(x) - start
+                    buffered[:remaining, i] = x[start:]
+            
+            return buffered
+    else:
+        raise NotImplementedError("Only 'nodelay' option is implemented")
+
+def il_SPL_excess(input_data):
+    
     pref = 2e-5  # reference pressure, Pa
-    Intensity = pref * 10 ** (input["Lcrop"] / 10)
-
-    freq_Lx = input["freq"] # freq vector of the tone
-    ToneF = input["ToneF"] # tone(s) central frequency
-    ToneL = input["ToneL"] # tone(s) level
-    NTones = len(ToneF) # number of tones
-
-    toneBark = hz2bark(ToneF) # convert central freq of tones to Bark scale
-    spectrumBark = hz2bark(freq_Lx) # convert freq vector to Bark scale
-
-    LX = np.zeros(NTones) # initialize sound pressure level excess vector
-
+    Intensity = pref * (10.0 ** (input_data['Lcrop'] / 10))
+    
+    freq_Lx = input_data['freq']  # freq vector of the tone
+    ToneF = input_data['ToneF']   # tone(s) central frequency
+    ToneL = input_data['ToneL']   # tone(s) level
+    NTones = len(ToneF)           # number of tones
+    
+    toneBark = il_Fq2Bark(ToneF)        # convert central freq of tones to Bark scale
+    spectrumBark = il_Fq2Bark(freq_Lx)  # convert freq vector to Bark scale
+    
+    LX = np.zeros(NTones)  # initialize sound pressure level excess vector
+    
     for i in range(NTones):
-
+        
         # Intensity of noise for each tone paragraph after eq 7b in Ref. [3] (Terhard's papers)
-
-        idx_cb = (spectrumBark >= round(toneBark[i] - 0.5)) & (spectrumBark <= round(toneBark[i] + 0.5)) # idx of the critical band around the tonal component
         
-        idx_toneBark = np.argmin(np.abs(spectrumBark - toneBark[i])) # find idx of the tone on the Bark vector
+        idx_cb = ((spectrumBark >= np.round(toneBark[i] - 0.5)) & 
+                  (spectrumBark <= np.round(toneBark[i] + 0.5)))  # idx of the critical band around the tonal component
         
-        idx_cb[idx_toneBark - 2 : idx_toneBark + 3] = False # skip the five central samples around the tonal component
-
-        EGR = np.sum(Intensity[idx_cb]) # Masking intensity of broadband noise
-
+        idx_toneBark = np.where(np.round(spectrumBark) == toneBark[i])[0]  # find idx of the tone on the Bark vector
+        
+        if len(idx_toneBark) > 0:
+            idx_toneBark = idx_toneBark[0]
+            # Create a copy of idx_cb to modify
+            idx_cb_copy = idx_cb.copy()
+            start_idx = max(0, idx_toneBark - 2)
+            end_idx = min(len(idx_cb_copy), idx_toneBark + 3)
+            idx_cb_copy[start_idx:end_idx] = False  # skip the five central samples around the tonal component
+            idx_cb = idx_cb_copy
+        
+        EGR = np.sum(Intensity[idx_cb])  # Masking intensity of broadband noise
+        
         # Secondary excitation level
         sumlo = 1e-99
         sumhi = 1e-99
-
+        
         for j in range(NTones):
-
+            
             if j < i:
-                s = -24 - (230 / ToneF[j]) + (0.2 * ToneL[j]) # eq 7b from Ref. [3]
+                
+                s = -24 - (230.0 / ToneF[j]) + (0.2 * ToneL[j])  # eq 7b from Ref. [3]
                 Lji = ToneL[j] - s * (toneBark[j] - toneBark[i])
-                sumlo += 10 ** (Lji / 20)
-
+                sumlo = sumlo + (10.0 ** (Lji / 20))
+                
             elif j > i:
+                
                 s = 27
                 Lji = ToneL[j] - s * (toneBark[j] - toneBark[i])
-                sumhi += 10 ** (Lji / 20)
-
+                sumhi = sumhi + (10.0 ** (Lji / 20))
+        
         AEK = sumlo + sumhi
-
+        
         # Intensity at threshold of hearing
         EHS = il_Threshold(ToneF[i])
-        EHS = 10 ** (EHS / 10)
-
-        # % Sound pressure level excess
-        if NTones == 1: # if there is only one tone
-            LXi = ToneL[i] - 10 * np.log10(EGR + EHS) # eq 4 from Ref. [3]
+        EHS = 10.0 ** (EHS / 10)
+        
+        # Sound pressure level excess - NOTE: in the original paper from Terhard [3]
+        # -10log10 is used while in the paper of Aures [1] simply -log10 is used
+        
+        if NTones == 1:  # if there is only one tone
+            LXi = ToneL[i] - 10.0 * np.log10(EGR + EHS)  # eq 4 from Ref. [3]
         else:
-            LXi = ToneL[i] - 10 * np.log10(AEK ** 2 + EGR + EHS) # eq 4 from Ref. [3]
-
+            LXi = ToneL[i] - 10.0 * np.log10(AEK**2 + EGR + EHS)  # eq 4 from Ref. [3]
+        
         if LXi > 0:
             LX[i] = LXi
-
+    
     return LX
 
-def il_tonal_weighting(input):
-    """
-    Compute tonal weighting for tonal components.
-    """
-    bw = input["BW"] # bandwidth of the tones [Hz]
-    fc = input["ToneF"] # central frequency of the tonal components
-    delta_L = input["LX"] # SPL excess for each tonal component
-    df = input["df"] # freq discretization
-
+def il_tonal_weighting(input_data):
+    
+    bw = input_data['BW']       # bandwidth of the tones [Hz]
+    fc = input_data['ToneF']    # central frequency of the tonal components
+    delta_L = input_data['LX']  # SPL excess for each tonal component
+    df = input_data['df']       # freq discretization
+    
     ## w1 accounts for each tonal component bandwidth
-
-    zup = hz2bark(fc + (bw / 2))
-    zlow = hz2bark(fc - (bw / 2))
-    dz = (zup - zlow) / df ** 2
-
+    
+    zup = il_Fq2Bark(fc + (bw / 2))
+    zlow = il_Fq2Bark(fc - (bw / 2))
+    dz = (zup - zlow) / (df**2)
+    
     w1 = 0.13 / (dz + 0.13)
-
+    
     ## w2 accounts for each tonal component's center frequency
-    w2 = (1 / np.sqrt(1 + 0.2 * (fc / 700 + 700 / fc) ** 2)) ** 0.29
-
-    # w3 accounts for each tonal component SPL excess
-    w3 = (1 - np.exp(-delta_L / 15)) ** 0.29
-
-    # prime weightings
-    ww1 = w1 ** (1 / 0.29)
-    ww2 = w2 ** (1 / 0.29)
-    ww3 = w3 ** (1 / 0.29)
-
-    # total tonal weighting
-    w_tonal = np.sqrt(np.sum((ww1 * ww2 * ww3) ** 2))
-
+    
+    w2 = (1.0 / np.sqrt(1 + 0.2 * ((fc / 700) + (700 / fc))**2))**(0.29)
+    
+    ## w3 accounts for each tonal component SPL excess
+    
+    w3 = (1 - np.exp(-delta_L / 15))**(0.29)
+    
+    ## prime weightings
+    
+    ww1 = w1**(1.0 / 0.29)
+    ww2 = w2**(1.0 / 0.29)
+    ww3 = w3**(1.0 / 0.29)
+    
+    ## total tonal weighting
+    
+    w_tonal = np.sqrt(np.sum((ww1 * ww2 * ww3)**2))
+    
     return w_tonal
+
+def il_Fq2Bark(f):
+    """
+    critical band rate corresponding to a given frequency
+    input f is frequency in Hz
+    output B is critical band rate in Barks
+    """
+    f = f / 1000
+    B = 13 * np.arctan(0.76 * f) + 3.5 * np.arctan((f / 7.5)**2)
+    
+    return B
 
 def il_Threshold(f):
     """
-    Compute hearing threshold in dB for a given frequency.
+    hearing threshold
+    input f is frequency in Hz
+    output L is threshold in dB
     """
     f = f / 1000
-    L = 3.64 * f ** -0.8 - 6.5 * np.exp(-0.6 * (f - 3.3) ** 2) + 1e-3 * f ** 4
+    L = (3.64 * (f**-0.8) - 
+         6.5 * np.exp(-0.6 * (f - 3.3)**2) + 
+         1e-3 * (f**4))
+    
     return L
 
+check_which = 1
+
 if __name__ == "__main__":
-    # generate test signal for Tonality_ECMA418_2
-    fs = 48000
-    t = np.arange(0, 5, 1/fs)
-    insig = 0.5 * np.sin(2 * np.pi * 440 * t) + 0.25 * np.sin(2 * np.pi * 880 * t)  # Example signal with two tones
-    insig = insig.reshape(-1, 1)  # Reshape to [N, 1] for single channel
-    # Call the Tonality_ECMA418_2 function
-    OUT = Tonality_ECMA418_2(insig, fs, fieldtype='free-frontal', time_skip=0.304, show=True)
+
+    if check_which == 0: # NO TEST
+
+        print("metrics_tonality.py")
+    
+    elif check_which == 1: # Tonality_Aures1985
+
+        """
+        Validation clip for Tonality_Aures1985
+        -----------------------------------
+
+        Generates a 1-second, 1 kHz sinusoid at 60 dB SPL, sampled at 44.1 kHz.
+        """
+
+        print("Running Tonality_Aures1985 test...")
+
+        fs = 44100              # Sampling rate in Hz
+        duration = 1.0          # Duration in seconds
+        f0 = 1000               # Frequency of pure tone (Hz)
+        Lp = 60                 # Desired sound pressure level (dB SPL)
+        pref = 20e-6            # Reference pressure in Pa
+
+        # Create time vector
+        t = np.arange(0, duration, 1/fs)
+
+        # Generate sine wave with RMS level corresponding to 60 dB SPL
+        rms_target = pref * 10**(Lp / 20)
+        amp = rms_target * np.sqrt(2)
+        signal = amp * np.sin(2 * np.pi * f0 * t)
+
+        # Compute tonality using Aures 1985 model
+        result = Tonality_Aures1985(signal, fs=fs, LoudnessField=0, time_skip=0.5, show=True)
+
+        # Print statistics
+        print("Tonality Statistics:")
+        print(f"InstantaneousTonality: {np.mean(result['InstantaneousTonality']):.3g}")
+        print(f"LoudnessWeighting: {np.mean(result['LoudnessWeighting']):.3g}")
+        print(f"TonalWeighting: {np.mean(result['TonalWeighting']):.3g}")

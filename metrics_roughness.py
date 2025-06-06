@@ -10,11 +10,10 @@ from scipy.fft import fft, ifft
 from scipy.signal.windows import hann, blackman
 from matplotlib import pyplot as plt
 
-from sound_metrics import ob13_iso532_1
-
+from sound_metrics import *
 from utilities import *
 
-__all__ = ["Loudness_ISO532_1", "Tonality_Aures1985"]
+__all__ = ["Roughness_Daniel1997"]
 FloatArray = NDArray[np.floating]
 
 # -------------------------
@@ -479,17 +478,17 @@ def Roughness_Daniel1997(insig=None, fs=None, time_skip=None, show=None, dBFS=94
     
     return OUT
 
-check_which = 2
+check_which = 0
 
 if __name__ == "__main__":
-    if check_which == 0:
+    if check_which == 0: # NO TEST
 
         print("metrics_roughness.py")
     
-    if check_which == 1:
+    elif check_which == 1: # Roughness_Daniel1997
 
         """
-        Validation clip for for Roughness_Daniel1997
+        Validation clip for Roughness_Daniel1997
         -----------------------------------
 
         Generates a 2-second, 1 kHz sinusoid with 70 Hz amplitude modulation at 60 dB SPL, sampled at 48 kHz.
