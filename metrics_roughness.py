@@ -21,7 +21,7 @@ FloatArray = NDArray[np.floating]
 #### ROUGHNESS METRICS ####
 # -------------------------
 
-def Roughness_Daniel1997(insig=None, fs=None, time_skip=None, show=None):
+def Roughness_Daniel1997(insig=None, fs=None, time_skip=None, show=None, dBFS=94):
     """
     Roughness calculation according to Daniel & Weber (1997)
     
@@ -35,9 +35,9 @@ def Roughness_Daniel1997(insig=None, fs=None, time_skip=None, show=None):
     OUT: dictionary containing roughness analysis results
     """
     
-    if insig is None:
-        print("Roughness_Daniel1997: Roughness calculation according to Daniel & Weber (1997)")
-        return None
+    # --- WAV file interface ---
+    if isinstance(insig, str):
+        insig, fs = wav2sig(insig, fs, dBFS)
     
     if show is None:
         # This simulates nargout check. In a real application, you might pass a flag
@@ -479,22 +479,40 @@ def Roughness_Daniel1997(insig=None, fs=None, time_skip=None, show=None):
     
     return OUT
 
+check_which = 2
+
 if __name__ == "__main__":
+    if check_which == 0:
 
-    fs = 48_000
-    f_mod = 70
-    f_carrier = 1_000.0
+        print("metrics_roughness.py")
+    
+    if check_which == 1:
 
-    p_rms = 20e-6 * 10**(60 / 20)
-    A = p_rms * np.sqrt(2)
-    t = np.arange(0.0, 2, 1 / fs)
-    envelope = 0.5 * (1.0 + np.sin(2 * np.pi * f_mod * t))
-    signal = A * envelope * np.sin(2 * np.pi * f_carrier * t)
-    insig = signal.astype(np.float32)
+        """
+        Validation clip for for Roughness_Daniel1997
+        -----------------------------------
 
-    OUT = Roughness_Daniel1997(insig, fs, time_skip=0.0, show=True)
+        Generates a 2-second, 1 kHz sinusoid with 70 Hz amplitude modulation at 60 dB SPL, sampled at 48 kHz.
+        """
 
-    print(f"Reference-tone check (expected ≈ 1 asper)")
-    print(f"  Mean roughness  : {OUT['Rmean']} asper")
-    print(f"  Max  roughness  : {OUT['Rmax']} asper")
-    print(f"  10 % exceedance : {OUT['R10']} asper")
+        print("Running Roughness_Daniel1997 test...")
+
+        fs = 48_000
+        f_mod = 70
+        f_carrier = 1_000.0
+
+        p_rms = 20e-6 * 10**(60 / 20)
+        A = p_rms * np.sqrt(2)
+        t = np.arange(0.0, 2, 1 / fs)
+        envelope = 0.5 * (1.0 + np.sin(2 * np.pi * f_mod * t))
+        signal = A * envelope * np.sin(2 * np.pi * f_carrier * t)
+        insig = signal.astype(np.float32)
+        #wavfile.write("am_1kHz_70Hz_60dB.wav", fs, signal.astype(np.float32))
+
+        OUT = Roughness_Daniel1997(insig, fs, time_skip=0.0, show=True)
+        #OUT = Roughness_Daniel1997("am_1kHz_70Hz_60dB.wav", fs, time_skip=0.0, show=True)
+
+        print(f"Reference-tone check (expected ≈ 1 asper)")
+        print(f"  Mean roughness  : {OUT['Rmean']} asper")
+        print(f"  Max  roughness  : {OUT['Rmax']} asper")
+        print(f"  10 % exceedance : {OUT['R10']} asper")

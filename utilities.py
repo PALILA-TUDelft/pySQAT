@@ -727,6 +727,316 @@ def wav2sig(insig, fs=None, dBFS=94):
 
     return insig, fs
 
+# ----------------------
+#### EPNL FUNCTIONS ####
+# ----------------------
+
+def get_Duration_Correction(PNLT, PNLTM, PNLTM_idx, dt, threshold):
+    # Find the PNLTM-threshold down points (t1 and t2)
+    Decay = PNLTM - threshold
+    K = 1  # find only first idx
+    
+    # t(1) is the first point of time after which PNLT becomes greater than PNLTM minus threshold
+    indices = np.where(PNLT[0:PNLTM_idx] > Decay)[0]  # idx_t1 is the first point where PNLT becomes >(PNLTM - threshold)
+    if len(indices) > 0:
+        idx_t1 = indices[0]  # take first occurrence (K=1)
+    else:
+        idx_t1 = None
+    
+    # t(2) is the point of time after which PNLT remains constantly less than PNLTM minus threshold
+    indices = np.where(PNLT[PNLTM_idx:] < Decay)[0]  # idx_t2 is the first point where PNLT becomes <(PNLTM - threshold)
+    if len(indices) > 0:
+        idx_t2 = indices[0] + PNLTM_idx  # correct for PNLTM_idx number because full vector is trimmed in the previous line
+    else:
+        idx_t2 = None
+    
+    # if case for idx_t2 not found (PNLT never becomes lower than Decay)
+    if idx_t2 is None:
+        idx_t2 = PNLT.shape[0] - 1  # take idx_t2 as last index in PNLT
+        warnings.warn("The signal does not decay by more than the threshold within the available duration. An indicative EPNL value is calculated from the available duration, but should not be used for aircraft noise certification.")
+    
+    # Calculate duration correction factor
+    D = 10 * np.log10(np.sum(10**(PNLT[idx_t1:idx_t2+1]/10))) - PNLTM + 10 * np.log10(dt/10)
+    
+    return D, idx_t1, idx_t2
+
+def get_PNL(input):
+    """
+    Convert SPL to Perceived Noisiness and calculate PNL metrics
+    
+    Parameters:
+    input : array-like
+        Input sound pressure level data
+        
+    Returns:
+    tuple : (PN, PNL, PNLM, PNLM_idx)
+        PN - Perceived Noisiness
+        PNL - Perceived Noise Level
+        PNLM - Maximum Perceived Noise Level
+        PNLM_idx - Index of maximum PNL
+    """
+    
+    num_times = input.shape[0]  # number of time steps
+    num_freqs = input.shape[1]  # number of freq bands
+
+    # Read Table A36-3 from Ref. [1], which provides the constants for mathematically formulated NOY values
+    noy_tab = np.array([
+    [1, 50, 91, 64, 52, 49, 55, 0.043478, 0.030103, 0.07952, 0.058098],
+    [2, 63, 85.9, 60, 51, 44, 51, 0.040570, 0.030103, 0.06816, 0.058098],
+    [3, 80, 87.3, 56, 49, 39, 46, 0.036831, 0.030103, 0.06816, 0.052288],
+    [4, 100, 79.9, 53, 47, 34, 42, 0.036831, 0.030103, 0.05964, 0.047534],
+    [5, 125, 79.8, 51, 46, 30, 39, 0.035336, 0.030103, 0.053013, 0.043573],
+    [6, 160, 76, 48, 45, 27, 36, 0.033333, 0.030103, 0.053013, 0.043573],
+    [7, 200, 74, 46, 43, 24, 33, 0.033333, 0.030103, 0.053013, 0.040221],
+    [8, 250, 74.9, 44, 42, 21, 30, 0.032051, 0.030103, 0.053013, 0.037349],
+    [9, 315, 94.6, 42, 41, 18, 27, 0.030675, 0.030103, 0.053013, 0.034859],
+    [10, 400, np.inf, 40, 40, 16, 25, 0.030103, 0, 0.053013, 0.034859],
+    [11, 500, np.inf, 40, 40, 16, 25, 0.030103, 0, 0.053013, 0.034859],
+    [12, 630, np.inf, 40, 40, 16, 25, 0.030103, 0, 0.053013, 0.034859],
+    [13, 800, np.inf, 40, 40, 16, 25, 0.030103, 0, 0.053013, 0.034859],
+    [14, 1000, np.inf, 40, 40, 16, 25, 0.030103, 0, 0.053013, 0.034859],
+    [15, 1250, np.inf, 38, 38, 15, 23, 0.030103, 0, 0.05964, 0.034859],
+    [16, 1600, np.inf, 34, 34, 12, 21, 0.02996, 0, 0.053013, 0.040221],
+    [17, 2000, np.inf, 32, 32, 9, 18, 0.02996, 0, 0.053013, 0.037349],
+    [18, 2500, np.inf, 30, 30, 5, 15, 0.02996, 0, 0.047712, 0.034859],
+    [19, 3150, np.inf, 29, 29, 4, 14, 0.02996, 0, 0.047712, 0.034859],
+    [20, 4000, np.inf, 29, 29, 5, 14, 0.02996, 0, 0.053013, 0.034859],
+    [21, 5000, np.inf, 30, 30, 6, 15, 0.02996, 0, 0.053013, 0.034859],
+    [22, 6300, np.inf, 31, 31, 10, 17, 0.02996, 0, 0.06816, 0.037349],
+    [23, 8000, 44.3, 37, 34, 17, 23, 0.042285, 0.02996, 0.07952, 0.037349],
+    [24, 10000, 50.7, 41, 37, 21, 29, 0.042285, 0.02996, 0.05964, 0.043573]
+    ])
+    # Band = noy_tab[:, 0]
+    # f = noy_tab[:, 1]
+    SPLa = noy_tab[:, 2]
+    SPLb = noy_tab[:, 3]
+    SPLc = noy_tab[:, 4]
+    SPLd = noy_tab[:, 5]
+    SPLe = noy_tab[:, 6]
+    Mb = noy_tab[:, 7]
+    Mc = noy_tab[:, 8]
+    Md = noy_tab[:, 9]
+    Me = noy_tab[:, 10]
+
+    # Convert SPL to Perceived Noisiness, nn
+
+    # DEFINITIONS
+    # i is index for the octave bands
+    # k is time-index vector
+
+    nn = np.zeros((num_times, num_freqs))
+
+    for i in range(num_freqs):
+        for k in range(num_times):
+            SPL = input[k, i]
+            if SPL >= SPLa[i]:
+                nn[k, i] = 10**(Mc[i] * (SPL - SPLc[i]))
+            elif SPL >= SPLb[i] and SPL < SPLa[i]:
+                nn[k, i] = 10**(Mb[i] * (SPL - SPLb[i]))
+            elif SPL >= SPLe[i] and SPL < SPLb[i]:
+                nn[k, i] = 0.3 * 10**(Me[i] * (SPL - SPLe[i]))
+            elif SPL >= SPLd[i] and SPL < SPLe[i]:
+                nn[k, i] = 0.1 * 10**(Md[i] * (SPL - SPLd[i]))
+            else:
+                nn[k, i] = 0
+
+    # Combine the Perceived Noisiness, nn, to get PN and PNL
+
+    PNL = np.zeros(num_times)
+    PN = np.zeros(num_times)
+
+    for k in range(num_times):
+        nmax = np.max(nn[k, :])
+        PN[k] = 0.85 * nmax + 0.15 * np.sum(nn[k, :])  # Perceived Noisiness, unit is Noys
+        
+        # Convert the total Perceived Noisiness, N(k) into Perceived Noise Level, PNL(k):
+        PNL[k] = 40 + (10/np.log10(2)) * np.log10(PN[k])  # Perceived Noise Level, unit is PNdB
+
+    PNLM_idx = np.argmax(PNL)  # Index of Maximum Perceived Noise Level
+    PNLM = PNL[PNLM_idx]  # Maximum Perceived Noise Level (PNLM), unit is PNdB
+
+    return PN, PNL, PNLM, PNLM_idx
+
+def get_PNLT(input, freq_bands, PNL):
+    # DEFINITIONS
+    # i is index for the octave bands
+    # k is time-index vector
+    
+    num_times = input.shape[0]  # number of time steps
+    num_freqs = input.shape[1]  # number of freq bands
+    
+    ## Step 1: start with the SPL in the 80 Hz TOB (band number 3 in this case),
+    # and calculate the changes in SPL (or "SLOPES) in the remainder TOB
+    
+    index_80 = np.where(freq_bands >= 80)[0][0]
+    
+    S = np.zeros((num_freqs, num_times))
+    for k in range(num_times):
+        for i in range(index_80 + 1, num_freqs):
+            S[i, k] = input[k, i] - input[k, i-1]
+    
+    ## Step 2: Encircle the value of the SLOPE, S(i,k),
+    # where the absolute value of the change in slope is greater than 5 dB
+    # STEP 3 is also included here
+    
+    delS = np.zeros(S.shape)
+    SPLs = np.zeros(delS.shape)
+    diff = np.zeros(num_freqs)
+    
+    for k in range(num_times):
+        for i in range(index_80, num_freqs):
+            diff[i] = abs(S[i, k] - S[i-1, k])
+            if diff[i] > 5:  # <--Step 2
+                delS[i, k] = S[i, k]
+                if S[i, k] > 0 and (S[i, k] > S[i-1, k]):  # Step 3.1: If the encircled value of S(i,k) is positive and algebraically greater than S(i-1,k), then encircle SPL(i,k)
+                    SPLs[i, k] = input[k, i]
+                elif S[i, k] <= 0 and (S[i-1, k] > 0):  # Step 3.2: if the encircled value of S(i,k) is zero or negative and S(i-1,k) is positive, then encircle SPL(i-1,k)
+                    SPLs[i-1, k] = input[k, i-1]
+            # Step 3.3: for all other cases, no SPL value is encircled
+    
+    ## Step 4: Omit all SPL(i,k) encircled in Step 3 and
+    # compute the new SPL levels, SPLP(i,k):
+    
+    SPLP = np.zeros((num_freqs, num_times))
+    
+    for k in range(num_times):
+        for i in range(num_freqs):
+            if SPLs[i, k] == 0:  # Step 4.1: for non-encircled SPL, set SPLP equal to the original SPL, SPLP(i,k) = SPL(i,k)
+                SPLP[i, k] = input[k, i]
+            elif SPLs[i, k] > 0 and i < num_freqs - 1:  # Step 4.2: for encircled SPL in bands 1 (50 Hz) till 23 (8 kHz) inclusive, set SPLP equal to the arithmetic average of the preceding and following SPL
+                SPLP[i, k] = 0.5 * (input[k, i-1] + input[k, i+1])
+            elif SPLs[i, k] > 0 and i == num_freqs - 1:  # Step 4.3: if the SPL in the highest freq band (10 kHz) is encircled, set the SPLP in that band equal to SPLP (k,24) = SPL (k,23) + S(k,23).
+                SPLP[i, k] = (input[k, i-1] + S[i-1, k])
+            elif SPLs[i, k] <= 0 and i == num_freqs - 1:
+                SPLP[i, k] = input[k, i]
+    
+    ## STEP 5: Recompute the new SLOPE, SP(i,k),
+    # including one for an imaginary 25th freq band (i.e. 12.5 kHz)
+    
+    SP = np.zeros((num_freqs + 1, num_times))
+    
+    for k in range(num_times):
+        for i in range(index_80 + 1, num_freqs - 1):
+            SP[i, k] = SPLP[i, k] - SPLP[i-1, k]
+        SP[index_80, k] = SP[index_80 + 1, k]
+        SP[num_freqs - 1, k] = SPLP[num_freqs - 1, k] - SPLP[num_freqs - 2, k]
+        SP[num_freqs, k] = SP[num_freqs - 1, k]
+    
+    ## STEP 6: for i, from 3 (80 Hz) till 23 (8 kHz),
+    # compute the arithmetic average of the three adjacent slopes (i.e. next 2)
+    
+    SB = np.zeros((num_freqs + 1, num_times))
+    for k in range(num_times):
+        for i in range(index_80, num_freqs - 1):
+            SB[i, k] = (1/3) * (SP[i, k] + SP[i+1, k] + SP[i+2, k])
+    
+    ## STEP 7: compute the final adjusted TOB SPL, SPLPP(i,k),
+    # by beginning with the band number 3 (80 Hz) and proceeding to band number 24 (10 kHz)
+    
+    SPLPP = np.zeros((num_freqs, num_times))
+    
+    for k in range(num_times):
+        SPLPP[index_80, k] = input[k, index_80]
+        for i in range(index_80 + 1, num_freqs - 1):
+            SPLPP[i, k] = (SPLPP[i-1, k] + SB[i-1, k])
+        SPLPP[num_freqs - 1, k] = SPLPP[num_freqs - 2, k] + SB[num_freqs - 2, k]
+    
+    ## Step 8: calculate the differences, F(i,k),
+    # between the original SPL and the final background SPL, SPLPP(i,k)
+    
+    F = np.zeros((num_freqs, num_times))
+    
+    for k in range(num_times):
+        for i in range(index_80, num_freqs):
+            F[i, k] = (input[k, i] - SPLPP[i, k])
+            if F[i, k] <= 1.5:  # note only values equal to or greater than 1.5.
+                F[i, k] = 0
+    
+    ## Step 9: for each TOB from 80 Hz till 10 kHz (i.e. band 3 through 24),
+    # determine the tone correction factor C(i,k) from the SPL differences F(i,k), and Table A36-2
+    # Step 10 is included here also
+    
+    C = np.zeros((num_freqs, num_times))
+    Cmax = np.zeros(num_times)
+    
+    for k in range(num_times):
+        for i in range(index_80, num_freqs):
+            if (freq_bands[i] >= 50 and freq_bands[i] < 500 and F[i, k] >= 1.5 and F[i, k] < 3):
+                C[i, k] = (F[i, k]/3 - 0.5)
+            elif (freq_bands[i] >= 50 and freq_bands[i] < 500 and F[i, k] >= 3 and F[i, k] < 20):
+                C[i, k] = (F[i, k]/6)
+            elif (freq_bands[i] >= 50 and freq_bands[i] < 500 and F[i, k] >= 20):
+                C[i, k] = 10/3
+            elif (freq_bands[i] >= 500 and freq_bands[i] <= 5000 and F[i, k] >= 1.5 and F[i, k] < 3):
+                C[i, k] = ((2 * F[i, k]/3) - 1)
+            elif (freq_bands[i] >= 500 and freq_bands[i] <= 5000 and F[i, k] >= 3 and F[i, k] < 20):
+                C[i, k] = (F[i, k]/3)
+            elif (freq_bands[i] >= 500 and freq_bands[i] <= 5000 and F[i, k] >= 20):
+                C[i, k] = (20/3)
+            elif (freq_bands[i] > 5000 and freq_bands[i] <= 10000 and F[i, k] >= 1.5 and F[i, k] < 3):
+                C[i, k] = (F[i, k]/3 - 0.5)
+            elif (freq_bands[i] > 5000 and freq_bands[i] <= 10000 and F[i, k] >= 3 and F[i, k] < 20):
+                C[i, k] = (F[i, k]/6)
+            elif (freq_bands[i] > 5000 and freq_bands[i] <= 10000 and F[i, k] >= 20):
+                C[i, k] = (10/3)
+        Cmax[k] = np.max(C[:, k])  # <--- STEP 10: designate the largest of the tone correction factors determined in STEP 9 as Cmax(k).
+    
+    ## PNLT calculation
+    # The Tone-corrected perceived noise levels, PNLT(k), must be determined by
+    # adding Cmax(k) values to corresponding PNL(k) values
+    
+    PNLT = np.zeros(num_times)
+    
+    for k in range(num_times):
+        PNLT[k] = PNL[k] + Cmax[k]  # TONE-CORRECTED PERCEIVED NOISE LEVEL, unit is TPNdB
+    
+    PNLTM_idx = np.argmax(PNLT)
+    PNLTM = PNLT[PNLTM_idx]  # MAXIMUM TONE-CORRECTED PERCEIVED NOISE LEVEL (PNLTM)
+    
+    ## Bandsharing adjustment to PNLTM
+    
+    if Cmax.shape[0] != 1:  # workaround to run the <run_validation_tone_correction.m> code, where only one time-step is considered
+        
+        # in case <PNLTM_idx> is closer from the lower or higher boundaries of
+        # the time vector, the bandsharing adjustment may not possible
+        
+        indicesToAccess = np.array([PNLTM_idx - 2, PNLTM_idx - 1, PNLTM_idx + 1, PNLTM_idx + 2])  # get indices to access
+        
+        isValid = (indicesToAccess >= 0) & (indicesToAccess < len(PNLT))  # Logical condition to check for valid indices (0-based)
+        
+        if np.all(isValid):  # runs only if all indices are valid
+            
+            Cavg = np.sum([Cmax[PNLTM_idx - 2], Cmax[PNLTM_idx - 1], Cmax[PNLTM_idx],
+                          Cmax[PNLTM_idx + 1], Cmax[PNLTM_idx + 2]]) / 5
+            
+            if Cavg > Cmax[PNLTM_idx]:
+                DeltaB = Cavg * Cmax[PNLTM_idx]
+            else:
+                DeltaB = 0
+        
+        else:  # there are empty indices: Bandsharing adjustment to PNLTM not possible
+            DeltaB = 0
+            warnings.warn('Bandsharing adjustment to PNLTM not possible. DeltaB truncated to zero.')
+        
+        # apply adjustment
+        PNLTM = PNLTM + DeltaB
+    
+    ## Output variables for verification of the tone correction implementation
+    
+    OUT = {} # Initialize OUT as a dictionary
+    
+    OUT['S'] = S
+    OUT['delS'] = delS
+    OUT['SPLP'] = SPLP
+    OUT['SP'] = SP
+    OUT['SB'] = SB
+    OUT['SPLPP'] = SPLPP
+    OUT['F'] = F
+    OUT['C'] = C
+    OUT['diff'] = diff
+    
+    return PNLT, PNLTM, PNLTM_idx, OUT
+
 
 # ---------------------------
 #### ECMA418_2 FUNCTIONS ####
