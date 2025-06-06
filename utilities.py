@@ -701,6 +701,32 @@ def export_dict_to_excel(data_dict, filename="output.xlsx"):
             except Exception as e:
                 print(f"Could not write {key}: {e}")
 
+def wav2sig(insig, fs=None, dBFS=94):
+    """
+    Load a WAV file and return the signal and sampling frequency.
+    If fs is provided, resample the signal to that frequency.
+    """
+    fs, insig_raw = wavfile.read(insig)
+
+    # Convert to float if needed
+    if insig_raw.dtype.kind in 'iu':
+        max_val = np.iinfo(insig_raw.dtype).max
+        insig = insig_raw.astype(np.float32) / max_val
+    else:
+        insig = insig_raw.astype(np.float32)
+
+    # dBFS scaling (default: 94 dB SPL full scale = 1 Pa)
+    gain_factor = 10 ** ((dBFS - 94) / 20)
+    insig = gain_factor * insig
+
+    # If stereo, convert to mono
+    if insig.ndim > 1:
+        insig = np.mean(insig, axis=1)
+
+    insig = np.asarray(insig)
+
+    return insig, fs
+
 
 # ---------------------------
 #### ECMA418_2 FUNCTIONS ####
@@ -1370,8 +1396,6 @@ def shm_signal_segment(
         
         signalSegmentedChan = np.concatenate((np.zeros((hopSize, 3)),
                                               np.reshape(signalTrunc, (hopSize, -1))), axis=1)
-
-        print(signalSegmentedChan)
 
         # Apply circular shifts and stack like MATLAB circshift
         signalSegmentedChan = np.concatenate(
