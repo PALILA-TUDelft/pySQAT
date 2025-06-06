@@ -1,15 +1,25 @@
+from __future__ import annotations
+from typing import Dict, Any, Tuple
+
 import numpy as np
+from numpy.typing import NDArray
 from scipy.io import wavfile
 from scipy.signal import resample_poly
-from scipy.fft import fft
-from scipy.signal.windows import hann
+from scipy.fft import fft, ifft
+from scipy.signal.windows import hann, blackman
 from matplotlib import pyplot as plt
 
 from sound_metrics import ob13_iso532_1
-from utilities import hz2bark, get_statistics, export_dict_to_excel
-from utilities import shm_resample, shm_preproc, shm_auditory_filt_bank, shm_basis_loudness, shm_noise_red_lowpass, shm_out_mid_ear_filter, shm_rough_low_pass, shm_rough_weight, shm_signal_segment
+
+from utilities import (hz2bark, get_statistics, export_dict_to_excel,
+                       get_statistics, from_db)
+from utilities import (shm_resample, shm_preproc, shm_auditory_filt_bank,
+                       shm_basis_loudness, shm_noise_red_lowpass,
+                       shm_out_mid_ear_filter, shm_rough_low_pass,
+                       shm_rough_weight, shm_signal_segment)
 
 __all__ = ["Loudness_ISO532_1", "Tonality_Aures1985"]
+FloatArray = NDArray[np.floating]
 
 """
 metrics.py
@@ -1015,6 +1025,7 @@ def Tonality_Aures1985(insig, fs=None, LoudnessField=0, time_skip=0, show=False,
     print(f"W_gr: {1-L_total['Loudness']/L_filtered['Loudness']}")
     return OUT
 
+# Not finished. Will finish implementation in the future. Need to check ECMA helpers.
 def Tonality_ECMA418_2(insig, fs, fieldtype='free-frontal', time_skip=0.304, show=False):
     """
     Returns tonality values and frequencies according to ECMA-418-2:2024.
@@ -1108,6 +1119,8 @@ def Tonality_ECMA418_2(insig, fs, fieldtype='free-frontal', time_skip=0.304, sho
 
     # Loop through channels in file
 
+    basisLoudnessArray = {}
+
     for chan in range(inchans):
 
         ## Apply auditory filter bank
@@ -1129,7 +1142,7 @@ def Tonality_ECMA418_2(insig, fs, fieldtype='free-frontal', time_skip=0.304, sho
         i_NBandsAvgDupe = np.vstack((np.concatenate(([1],[1],[1],np.arange(6, 19), np.arange(23, 32), np.arange(34, 62))),
                                     np.concatenate(([2],[3],[5], np.arange(10,23), np.arange(25,34), np.arange(34, 62)))))
         
-        for zBand in range(60, 0, -1):
+        for zBand in range(60, -1, -1):
 
             # Segmentation into blocks
 
@@ -1138,11 +1151,536 @@ def Tonality_ECMA418_2(insig, fs, fieldtype='free-frontal', time_skip=0.304, sho
             pn_lz, _ = shm_signal_segment(pn_omzDupe[zBand,:], 0,
                                           blockSizeDupe[zBand], overlap, i_start)
             
+            pn_lz = pn_lz.squeeze(-1)
+            
+            # Transformation into Loudness
+            # Sections 5.1.6 to 5.1.9 ECMA-418-2:2024 [N'_basis(z)]
+            p_rlz, bandBasisLoudness, _ = shm_basis_loudness(pn_lz, bandCentreFreqsDupe[zBand])
+            basisLoudnessArray[zBand] = bandBasisLoudness
+
             www = 0
+
 
     ## CHECKPOINT - TODO: Still check variables.
 
     return None
+
+# -------------------------
+#### ROUGHNESS METRICS ####
+# -------------------------
+
+def Roughness_Daniel1997(
+    insig: FloatArray,
+    fs: int,
+    time_skip: float = 0.0,
+    show: bool = False,
+) -> Dict[str, Any]:
+    """Compute time‑varying psycho‑acoustic roughness (Daniel & Weber 1997).
+
+    Parameters
+    ----------
+    insig : ndarray, shape (N,) or (N, 1)
+        Acoustic signal in Pascal.
+    fs : int
+        Sampling rate in Hz.
+    time_skip : float, default 0 s
+        Lead‑in to exclude from statistics.
+    show : bool, default False
+        If True produce the same diagnostic plots as the original MATLAB code.
+
+    Returns
+    -------
+    OUT : dict
+        Output structure with *exactly* the same field names as the MATLAB
+        struct (`InstantaneousRoughness`, `Rmean`, …).
+    """
+    # ---------------------------------------------------------------------
+    # Input handling & mono conversion
+    # ---------------------------------------------------------------------
+    audio = np.asarray(insig, dtype=float).squeeze()
+    if audio.ndim != 1:
+        raise ValueError("'insig' must be mono (1‑D array)")
+
+    ## resampling input signal
+    if fs not in (44_100, 40_960, 48_000):
+        gcd_fs = np.gcd(48_000, fs)
+        audio = resample_poly(audio, 48_000 // gcd_fs, fs // gcd_fs)
+        fs = 48_000
+
+    ## window settings
+    time_resolution = 0.2  # time-step for the windowing
+    N = int(round(fs * time_resolution)) # window length
+    if N < 128:
+        raise ValueError("FFT size too small – check sampling rate")
+
+    hopsize = N // 2 # hopsize is the number of samples hop between successive windows (window length is 8192).
+    window = blackman(N, sym=False)
+
+    # Pre‑compute constants used every frame
+    N2 = N // 2 + 1
+    dFs = fs / N
+
+    # ---------------------------------------------------------------------
+    # Zwicker critical‑band table (exact copy of MATLAB literal)
+    # ---------------------------------------------------------------------
+    Bark = np.array([
+        [ 0,     0,     50,   0.5],
+        [ 1,   100,    150,   1.5],
+        [ 2,   200,    250,   2.5],
+        [ 3,   300,    350,   3.5],
+        [ 4,   400,    450,   4.5],
+        [ 5,   510,    570,   5.5],
+        [ 6,   630,    700,   6.5],
+        [ 7,   770,    840,   7.5],
+        [ 8,   920,   1000,   8.5],
+        [ 9,  1080,   1170,   9.5],
+        [10,  1270,   1370,  10.5],
+        [11,  1480,   1600,  11.5],
+        [12,  1720,   1850,  12.5],
+        [13,  2000,   2150,  13.5],
+        [14,  2320,   2500,  14.5],
+        [15,  2700,   2900,  15.5],
+        [16,  3150,   3400,  16.5],
+        [17,  3700,   4000,  17.5],
+        [18,  4400,   4800,  18.5],
+        [19,  5300,   5800,  19.5],
+        [20,  6400,   7000,  20.5],
+        [21,  7700,   8500,  21.5],
+        [22,  9500,  10500,  22.5],
+        [23, 12000,  13500,  23.5],
+        [24, 15500,  20000,  24.5],
+    ], dtype=float)
+
+    # Bark2 is the concatenation used for interp
+    Bark2 = np.column_stack(
+        [np.sort(np.r_[Bark[:, 1], Bark[:, 2]]),
+         np.sort(np.r_[Bark[:, 0], Bark[:, 3]])]
+    )
+
+    N0  = int(round(20 * N / fs)) # low frequency index @ 20 Hz
+    N01 = N0
+    Ntop = int(round(20_000 * N / fs))  # high frequency index @ 20 kHz
+
+    # Make list with Barknumber of each frequency bin
+    Barkno = np.zeros(N2)
+    f = np.arange(N0, Ntop + 1, 1)
+    Barkno[f] = np.interp(f * dFs, Bark2[:, 0], Bark2[:, 1])
+
+    # Make list of frequency bins closest to Cf's
+    Cf = np.empty((2, 24), dtype=int)
+    Cf[0, :] = np.round(Bark[1:, 1] * N / fs).astype(int) - N0
+    Cf[1, :] = Bark[1:, 1]
+
+    # Make list of frequency bins closest to Critical Band Border frequencies
+    Bf = np.empty((2, 25), dtype=int)
+    Bf[0, 0] = int(round(Bark[0, 2] * N / fs))
+
+    for a in range(24):
+        Bf[0, a + 1] = int(round(Bark[a + 1, 2] * N / fs)) - N0
+        Bf[1, a] = Bf[0, a] - 1
+
+    Bf[1, 24] = int(round(Bark[24, 2] * N / fs)) - N0
+
+    ## Make list of minimum excitation (Hearing Treshold)
+    HTres = np.array([
+        [ 0,   130],
+        [ 0.01,  70],
+        [ 0.17,  60],
+        [ 0.8,  30],
+        [ 1,    25],
+        [ 1.5,  20],
+        [ 2,    15],
+        [ 3.3, 10],
+        [ 4,   8.1],
+        [ 5,   6.3],
+        [ 6,    5],
+        [ 8,   3.5],
+        [10,   2.5],
+        [12,   1.7],
+        [13.3,  0],
+        [15, -2.5],
+        [16,  -4 ],
+        [17, -3.7],
+        [18, -1.5],
+        [19,  1.4],
+        [20,   3.8],
+        [21,   5 ],
+        [22,   7.5],
+        [23,  15 ],
+        [24,  48 ],
+        [24.5, 60 ],
+        [25, 130 ]
+    ], dtype=float)
+
+    k = np.arange(N0, Ntop + 1, 1)
+    MinExcdB = np.interp(Barkno[k], HTres[:, 0], HTres[:, 1])
+
+    ## Initialize constants and variables
+
+    dz = 0.5 # Barks
+    z = np.arange(0.5, 23.5 + dz, dz) # frequency in Barks
+
+    gr = np.array([
+        [ 0, 1, 2.5, 4.9, 6.5, 8, 9, 10, 11, 11.5, 13, 17.5, 21, 24 ],
+        [ 0, 0.35, 0.7, 0.7, 1.1, 1.25, 1.26, 1.18, 1.08, 1, 0.66, 0.46, 0.38, 0.3 ]
+    ])
+
+    gzi = np.sqrt(np.interp(np.arange(1, 48, 1) / 2, gr[0], gr[1]))
+
+    # calculate a0
+    a0tab = np.array([
+        [ 0,     0],
+        [10,   0],
+        [12,   1.15],
+        [13,   2.31],
+        [14,   3.85],
+        [15,   5.62],
+        [16,   6.92],
+        [16.5, 7.38],
+        [17, 6.92],
+        [18, 4.23],
+        [18.5, 2.31],
+        [19,   0],
+        [20, -1.43],
+        [21, -2.59],
+        [21.5, -3.57],
+        [22, -5.19],
+        [22.5, -7.41],
+        [23, -11.3],
+        [23.5, -20],
+        [24, -40],
+        [25, -130],
+        [26, -999]
+    ], dtype=float)
+
+    a0 = np.ones(N, dtype=float)
+    a0[k] = db2mag(np.interp(Barkno[k], a0tab[:, 0], a0tab[:, 1]))
+
+    ## BEGIN Hweights
+
+    # weights for freq. bins < N/2
+
+    def _build_H(proto: NDArray[np.floating]) -> Tuple[int, NDArray[np.floating]]:
+        """Return last usable bin and dense weight curve for a prototype table."""
+        f_proto, w_proto = proto[:, 0], proto[:, 1]
+
+        last = int(np.floor((f_proto[-1] / fs) * N))
+        k = np.arange(2, last + 1, 1)
+        f = (k) * fs / N
+        H = np.zeros(N)
+        H[k] = np.interp(f, f_proto, w_proto)
+        return last, H
+
+    H2_proto = np.array([
+        [ 0, 0],
+        [17, 0.8],
+        [23, 0.95],
+        [25, 0.975],
+        [32, 1],
+        [37, 0.975],
+        [48, 0.9],
+        [67, 0.8],
+        [90, 0.7],
+        [114, 0.6],
+        [171, 0.4],
+        [206, 0.3],
+        [247, 0.2],
+        [294, 0.1],
+        [358, 0]
+    ], dtype=float)
+
+    H5_proto = np.array([
+        [ 0, 0],
+        [32, 0.8],
+        [43, 0.95],
+        [56, 1],
+        [69, 0.975],
+        [92, 0.9],
+        [120, 0.8],
+        [142, 0.7],
+        [165, 0.6],
+        [231, 0.4],
+        [277, 0.3],
+        [331, 0.2],
+        [397, 0.1],
+        [502, 0]
+    ], dtype=float)
+
+    H16_proto = np.array([
+        [ 0, 0],
+        [23.5, 0.4],
+        [34, 0.6],
+        [47, 0.8],
+        [56, 0.9],
+        [63, 0.95],
+        [79, 1],
+        [100, 0.975],
+        [115, 0.95],
+        [135, 0.9],
+        [159, 0.85],
+        [172, 0.8],
+        [194, 0.7],
+        [215, 0.6],
+        [244, 0.5],
+        [290, 0.4],
+        [348, 0.3],
+        [415, 0.2],
+        [500, 0.1],
+        [645, 0]
+    ], dtype=float)
+
+    H21_proto = np.array([
+        [ 0, 0],
+        [19, 0.4],
+        [44, 0.8],
+        [52.5, 0.9],
+        [58, 0.95],
+        [75, 1],
+        [101.5, 0.95],
+        [114.5, 0.9],
+        [132.5, 0.85],
+        [143.5, 0.8],
+        [165.5, 0.7],
+        [197.5, 0.6],
+        [241, 0.5],
+        [290, 0.4],
+        [348, 0.3],
+        [415, 0.2],
+        [500, 0.1],
+        [645, 0]
+    ], dtype=float)
+
+    H42_proto = np.array([
+        [ 0, 0],
+        [15, 0.4],
+        [41, 0.8],
+        [49, 0.9],
+        [53, 0.965],
+        [64, 0.99],
+        [71, 1],
+        [88, 0.95],
+        [94, 0.9],
+        [106, 0.85],
+        [115, 0.8],
+        [137, 0.7],
+        [180, 0.6],
+        [238, 0.5],
+        [290, 0.4],
+        [348, 0.3],
+        [415, 0.2],
+        [500, 0.1],
+        [645, 0]
+    ], dtype=float)
+
+    _, H2  = _build_H(H2_proto)
+    _, H5  = _build_H(H5_proto)
+    _, H16 = _build_H(H16_proto)
+    _, H21 = _build_H(H21_proto)
+    _, H42 = _build_H(H42_proto)
+
+    Hweight = np.zeros((47, N))
+
+    Hweight[1, :] = Hweight[2, :] = Hweight[3, :] = Hweight[0, :] = H2 # H1-H4
+    Hweight[4, :] = H5
+    Hweight[5:15, :] = H5  # H6 – H15
+    Hweight[15, :]  = H16
+    Hweight[16:20, :] = H16  # H17 – H20
+    Hweight[20, :]  = H21
+    Hweight[21:41, :] = H21  # H22 – H41
+    Hweight[41, :]  = H42
+    Hweight[42:, :] = H42  # H43 – H47
+
+    ## BEGIN process window
+
+    AmpCal = db2mag(91.2) * 2.0 / (N * window.mean())
+
+    # Calibration between wav-level and loudness-level (assuming blackman window and FFT will follow)
+    Chno = 47  # number of channels
+    Cal  = 0.50  # calibration factor, twice the old value (0.25)
+    qb = np.arange(N0, Ntop + 1, 1)
+    freqs = (qb + 1) * fs / N # TODO: potential conflict?
+    hBPi  = np.zeros((Chno, N))
+    hBPrms = np.zeros(Chno)
+    mdept  = np.zeros(Chno)
+    ki     = np.zeros(Chno - 2)
+    ri     = np.zeros(Chno)
+    ei    = np.zeros((Chno, N))
+    Fei   = np.zeros((Chno, N), dtype=complex)
+
+    startIndex = 0
+    endIndex   = N
+
+    samples = audio.size
+    n_frames = int(np.floor((samples - N) / hopsize))
+    TimePoints = np.empty(n_frames)
+    R_mat      = np.empty(n_frames)
+    SPL_mat    = np.empty(n_frames)
+    ri_mat     = np.empty((Chno, n_frames))
+
+    # for each frame
+    for windowNum in range(n_frames):
+
+        dataIn = audio[startIndex:endIndex] * window
+        currentTimePoint = startIndex / fs
+
+        # Calculate Excitation Patterns
+        TempIn = AmpCal * dataIn
+        TempIn = a0 * fft(TempIn)
+        Lg     = np.abs(TempIn[qb]) # get absolute value of fourier transform for  indices in range of human hearing
+        LdB    = mag2db(Lg)
+
+        whichL = np.nonzero(LdB > MinExcdB)[0] # extract indices where FFT magnitudes exceed excitation threshold
+        sizL   = whichL.size # get number of frequencies where this holds
+
+        if sizL == 0:
+            # Entire spectrum below threshold – roughness 0
+            R_mat[windowNum] = 0.0
+            ri_mat[:, windowNum] = 0.0
+            TimePoints[windowNum] = currentTimePoint
+            SPL_mat[windowNum] = -400.0
+            startIndex += hopsize
+            endIndex   += hopsize
+            continue
+        
+        # steepness of slopes (Terhardt)
+        S1 = -27.0
+        S2 = np.zeros(sizL) # preallocate
+
+        for w, idx in enumerate(whichL):
+
+            # Steepness of upper slope [dB/Bark] in accordance with Terhardt
+            steep = -24.0 - (230.0 / freqs[idx]) + 0.2 * LdB[idx]
+
+            if steep < 0:
+                S2[w] = steep # set S2 with steepness value calculated earlier
+
+        whichZ = np.empty((2, sizL), dtype=int) # preallocate
+        whichZ[0, :] = np.floor(2 * Barkno[whichL] ).astype(int) # get bark band numbers
+        whichZ[1, :] = np.ceil (2 * Barkno[whichL] ).astype(int)
+
+        ExcAmp = np.zeros((sizL, Chno))
+        Slopes = np.zeros((sizL, Chno))
+
+        for k_l in range(sizL): # loop over freq indices above threshold
+            Ltmp = LdB[whichL[k_l]] # copy FFT magnitude (in dB) above threshold
+            Btmp = Barkno[whichL[k_l]] # and the bark number associated with it
+
+            for l in range(whichZ[0, k_l]): # loop up to floored bark number of freq index k
+                Stemp = (S1 * (Btmp - (l * 0.5))) + Ltmp
+                if Stemp > MinExcdB[l]:
+                    Slopes[k_l, l] = db2mag(Stemp)
+            
+            for l in range(whichZ[1, k_l], Chno): # loop up to ceil'd bark number
+                Stemp = (S2[k_l] * ((l * 0.5) - Btmp)) + Ltmp
+                if Stemp > MinExcdB[l]:
+                    Slopes[k_l, l] = db2mag(Stemp) # critical filterbank upper side
+
+
+        for k_ch in range(Chno): # loop over each channel
+            etmp = np.zeros(N, dtype=complex)
+            for l in range(sizL): # for each l index of fft bin in human hearing freq range
+                N1tmp = whichL[l] # get freq index of bin
+                if whichZ[0, l] == k_ch:
+                    ExcAmp[l, k_ch] = 1.0
+                elif whichZ[1, l] == k_ch:
+                    ExcAmp[l, k_ch] = 1.0
+                elif whichZ[1, l] > k_ch:
+                    ExcAmp[l, k_ch] = Slopes[l, k_ch + 1] / Lg[N1tmp]
+                else:
+                    ExcAmp[l, k_ch] = Slopes[l, k_ch - 1] / Lg[N1tmp]
+                etmp[N1tmp + N01] = ExcAmp[l, k_ch] * TempIn[N1tmp + N01]
+
+            # this is the specific excitation time function
+            ei[k_ch, :] = N * np.real(ifft(etmp, n=N)) # ifft to get time domain blocks of signal
+            etmp_abs = np.abs(ei[k_ch, :])
+            h0 = etmp_abs.mean()
+            Fei[k_ch, :] = fft(etmp_abs - h0, n=N)
+            hBPi[k_ch, :] = 2 * np.real(ifft(Fei[k_ch, :] * Hweight[k_ch, :], n=N))
+            hBPrms[k_ch] = float(np.sqrt(np.mean(np.square(hBPi[k_ch, :], dtype=float), dtype=float)))
+
+            if h0 > 0:
+                mdept[k_ch] = hBPrms[k_ch] / h0
+                mdept[k_ch] = min(mdept[k_ch], 1.0)
+            else:
+                mdept[k_ch] = 0.0
+
+        # find cross-correlation coefficients
+        for k in range(45):
+            cfac = np.cov(hBPi[k, :], hBPi[k + 2, :])
+            den = np.diag(cfac)
+            den = np.sqrt(np.outer(den, den)).squeeze()
+            ki[k] = cfac[0, 1] / den[0, 1] if den[0, 1] > 0 else 0.0
+
+        # Calculate specific roughness ri and total roughness R
+        ri[0] = (gzi[0] * mdept[0] * ki[0]) ** 2
+        ri[1] = (gzi[1] * mdept[1] * ki[1]) ** 2
+
+        for k in range(2, 45):
+            ri[k] = (gzi[k] * mdept[k] * ki[k - 2] * ki[k]) ** 2
+
+        ri[45] = (gzi[45] * mdept[45] * ki[43]) ** 2
+        ri[46] = (gzi[46] * mdept[46] * ki[44]) ** 2
+
+        ri *= Cal # appropriately scaled specific roughness
+        R = dz * ri.sum() # total R = integration of the specific R pattern
+
+        spl_rms = np.mean(float(np.sqrt(np.mean(np.square(dataIn, dtype=float), dtype=float))))
+        SPL = mag2db(spl_rms) + 83 if spl_rms > 0 else -400.0 # -20 dBFS <--> 60 dB SPL
+
+        # matrices to return
+        R_mat[windowNum] = R
+        ri_mat[:, windowNum] = ri
+        SPL_mat[windowNum] = SPL
+
+        TimePoints[windowNum] = currentTimePoint
+        startIndex += hopsize
+        endIndex   += hopsize
+
+    # ------------------------------------------------------------------
+    # output struct
+    # ------------------------------------------------------------------
+    OUT: Dict[str, Any] = {
+        "InstantaneousRoughness": R_mat, # instantaneous roughness
+        "InstantaneousSpecificRoughness": ri_mat, # time-varying specific roughness
+        "TimeAveragedSpecificRoughness": ri_mat.mean(axis=1), # mean specific roughness
+        "time": TimePoints, # time
+        "barkAxis": z, # critical band rate (for specific roughness)
+        "dz": dz,
+    }
+
+    # Roughness statistics based on InstantaneousRoughness
+
+    idx_skip = int(np.searchsorted(TimePoints, time_skip, side="left")) # find idx of time_skip on time vector
+    OUT.update(get_statistics(R_mat[idx_skip:], "Roughness_Daniel1997")) # get statistics
+
+    # plots
+    if show:
+        import matplotlib.pyplot as plt
+        plt.figure(figsize=(12, 8), num="Roughness analysis – Daniel 1997")
+
+        ax1 = plt.subplot(2, 2, (1, 2))
+        ax1.plot(TimePoints, R_mat, "r-")
+        ax1.set(xlabel="Time (s)", ylabel="Roughness, R (asper)", title="Instantaneous roughness")
+        ax1.grid(True)
+
+        ax2 = plt.subplot(2, 2, 3)
+        ax2.plot(np.arange(1, 48) / 2, ri_mat.mean(axis=1), "r-")
+        ax2.set(xlabel="Critical band, z (Bark)", ylabel="Specific roughness, R′ (asper/Bark)",
+                title="Time‑averaged specific roughness")
+        ax2.grid(True)
+
+        ax3 = plt.subplot(2, 2, 4)
+        xx, yy = np.meshgrid(TimePoints, z)
+        pcm = ax3.pcolormesh(xx, yy, ri_mat, shading="auto")
+        plt.colorbar(pcm, ax=ax3, label="Specific roughness, R′ (asper/Bark)")
+        ax3.set(xlabel="Time (s)", ylabel="Critical band, z (Bark)",
+                title="Instantaneous specific roughness")
+
+        plt.tight_layout()
+        plt.show()
+
+    return OUT
+
 
 # ----------------------
 #### HELPER FUNCTIONS ####
@@ -1277,11 +1815,35 @@ def wav2sig(insig, fs=None, dBFS=94):
 
     return insig, fs
 
+def db2mag(x: FloatArray | float) -> FloatArray | float:  # linear amplitude
+    return from_db(x, 20.0)  # wrapper around utilities.from_db
+
+def mag2db(x: FloatArray | float, *, eps: float = 1e-12) -> FloatArray | float:
+    return 20.0 * np.log10(np.maximum(np.asarray(x, dtype=float), eps))
+
 if __name__ == "__main__":
-    # generate test signal for Tonality_ECMA418_2
-    fs = 48000
-    t = np.arange(0, 5, 1/fs)
-    insig = 0.5 * np.sin(2 * np.pi * 440 * t) + 0.25 * np.sin(2 * np.pi * 880 * t)  # Example signal with two tones
-    insig = insig.reshape(-1, 1)  # Reshape to [N, 1] for single channel
-    # Call the Tonality_ECMA418_2 function
-    OUT = Tonality_ECMA418_2(insig, fs, fieldtype='free-frontal', time_skip=0.304, show=True)
+    # # generate test signal for Tonality_ECMA418_2
+    # fs = 48000
+    # t = np.arange(0, 5, 1/fs)
+    # insig = 0.5 * np.sin(2 * np.pi * 440 * t) + 0.25 * np.sin(2 * np.pi * 880 * t)  # Example signal with two tones
+    # insig = insig.reshape(-1, 1)  # Reshape to [N, 1] for single channel
+    # # Call the Tonality_ECMA418_2 function
+    # OUT = Tonality_ECMA418_2(insig, fs, fieldtype='free-frontal', time_skip=0.304, show=True)
+
+    fs = 48_000
+    f_mod = 70
+    f_carrier = 1_000.0
+
+    p_rms = 20e-6 * 10**(60 / 20)
+    A = p_rms * np.sqrt(2)
+    t = np.arange(0.0, 2, 1 / fs)
+    envelope = 0.5 * (1.0 + np.sin(2 * np.pi * f_mod * t))
+    signal = A * envelope * np.sin(2 * np.pi * f_carrier * t)
+    insig = signal.astype(np.float32)
+
+    OUT = Roughness_Daniel1997(insig, fs, time_skip=0.0, show=True)
+
+    print(f"Reference-tone check (expected ≈ 1 asper)")
+    print(f"  Mean roughness  : {OUT['Rmean']} asper")
+    print(f"  Max  roughness  : {OUT['Rmax']} asper")
+    print(f"  10 % exceedance : {OUT['R10']} asper")

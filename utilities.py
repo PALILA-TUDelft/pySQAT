@@ -808,7 +808,7 @@ def shm_auditory_filt_bank(signal: np.ndarray, outplot: bool = False) -> np.ndar
 
 def shm_basis_loudness(
     signalSegmented: np.ndarray,
-    bandCentreFreqs: float | None = None,
+    bandCentreFreq: float | None = None,
     tol: float = 1.0
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
@@ -872,7 +872,7 @@ def shm_basis_loudness(
     # Centre‑frequency handling
     if bandCentreFreqs is not None:
         idx = int(np.abs(bandCentreFreqs - bandCentreFreqs).argmin())
-        if abs(bandCentreFreqs[idx] - bandCentreFreqs) > tol:
+        if abs(bandCentreFreqs[idx] - bandCentreFreqs[idx]) > tol:
             raise ValueError(
                 f"{bandCentreFreqs} Hz is not within ±{tol} Hz of any standard half‑Bark centre; "
                 f"closest is {bandCentreFreqs[idx]:.2f} Hz.")
@@ -882,16 +882,22 @@ def shm_basis_loudness(
     signalRectSeg = np.maximum(signalSegmented, 0.0)
 
     # Block RMS (Eq. 22) – factor 2 because rectified signal is positive‑only
+    sumRMS = np.sum(signalRectSeg ** 2, axis=0)
+    factorRMS = (2.0 / signalRectSeg.shape[0])
     blockRMS = np.sqrt((2.0 / signalRectSeg.shape[0]) * np.sum(signalRectSeg ** 2, axis=0))
 
-    # Loudness transform (Eqs. 23–24)
-    bandLoudness = cal_N * cal_Nx * (blockRMS / 20e-6) * np.prod((1 + (blockRMS[..., None] / p_threshold) ** a) ** (np.diff(v) / a), axis=-1)
+    # Loudness transform (Eqs. 23–24) # TODO: this might be the issue
+    bandLoudness = cal_N * cal_Nx * (blockRMS / 20e-6) * np.prod(
+    (1 + (blockRMS[np.newaxis, :] / p_threshold[:, np.newaxis]) ** a) ** 
+    ((np.diff(v) / a)[:, np.newaxis]),
+    axis=0)
 
     blockRMS = np.squeeze(blockRMS)
 
     # Threshold‑in‑quiet correction (Eq. 25)
     if bandCentreFreqs is not None:  # 2‑D input, single band
-        basisLoudness = bandLoudness - LTQz[idx]
+        D1 = LTQz[bandCentreFreq == bandCentreFreqs]
+        basisLoudness = bandLoudness - LTQz[bandCentreFreq == bandCentreFreqs]
     else:                             # 3‑D input, all 53 bands
         basisLoudness = bandLoudness - LTQz.reshape((1,) * (blockRMS.ndim - 1) + (53,))
 
