@@ -1055,7 +1055,7 @@ def EPNL_FAR_Part36(insig=None, fs=None, method=None, dt=None, threshold=None, s
 
     return OUT
 
-check_which = 0
+check_which = 1
 
 if __name__ == "__main__":
     if check_which == 0: # NO TEST
