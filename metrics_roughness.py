@@ -511,7 +511,6 @@ if __name__ == "__main__":
         OUT = Roughness_Daniel1997(insig, fs, time_skip=0.0, show=True)
         #OUT = Roughness_Daniel1997("am_1kHz_70Hz_60dB.wav", fs, time_skip=0.0, show=True)
 
-        print(f"Reference-tone check (expected ≈ 1 asper)")
         print(f"  Mean roughness  : {OUT['Rmean']} asper")
         print(f"  Max  roughness  : {OUT['Rmax']} asper")
         print(f"  10 % exceedance : {OUT['R10']} asper")
