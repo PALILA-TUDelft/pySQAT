@@ -486,48 +486,9 @@ def Tonality_ECMA418_2(insig, fs, fieldtype='free-frontal', time_skip=0.304, sho
 
     return None
 
-# ----------------------
-#### HELPER FUNCTIONS ####
-# ----------------------
-
-def buffer(x, n, p=0, opt='nodelay'):
-    """
-    Matlab-like buffer function implementation
-    """
-    if opt == 'nodelay':
-        # Calculate number of columns
-        if p == 0:
-            # No overlap
-            cols = len(x) // n
-            # Truncate x to fit exactly
-            x_truncated = x[:cols * n]
-            return x_truncated.reshape((n, cols), order='F')
-        else:
-            # With overlap
-            step = n - p
-            if step <= 0:
-                raise ValueError("Overlap must be less than frame length")
-            
-            # Calculate number of frames
-            cols = (len(x) - p) // step
-            if cols <= 0:
-                cols = 1
-            
-            # Create buffered array
-            buffered = np.zeros((n, cols))
-            for i in range(cols):
-                start = i * step
-                end = start + n
-                if end <= len(x):
-                    buffered[:, i] = x[start:end]
-                else:
-                    # Pad with zeros if necessary
-                    remaining = len(x) - start
-                    buffered[:remaining, i] = x[start:]
-            
-            return buffered
-    else:
-        raise NotImplementedError("Only 'nodelay' option is implemented")
+# ------------------------------
+#### LOCAL HELPER FUNCTIONS ####
+# ------------------------------
 
 def il_SPL_excess(input_data):
     

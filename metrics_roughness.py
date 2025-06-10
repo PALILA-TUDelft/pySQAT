@@ -478,7 +478,7 @@ def Roughness_Daniel1997(insig=None, fs=None, time_skip=None, show=None, dBFS=94
     
     return OUT
 
-check_which = 0
+check_which = 1
 
 if __name__ == "__main__":
     if check_which == 0: # NO TEST

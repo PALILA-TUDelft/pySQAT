@@ -10,13 +10,14 @@ import pandas as pd
 from numpy.lib.stride_tricks import sliding_window_view
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
-from scipy.signal import firwin2, freqz, lfilter, sosfilt, sosfreqz, resample_poly
+from scipy.signal import firwin2, freqz, lfilter, sosfilt, sosfreqz, resample_poly, iirdesign
 from scipy.io import wavfile
 from scipy.special import comb
 import soundfile as sf
 from IPython.display import Audio, display
 from pathlib import Path
 from typing import Union, Sequence, Any, Tuple, Optional, Dict, Literal
+import itertools
 
 FloatArrayLike = Union[float, Sequence[float], np.ndarray]
 ArrayLikeInt   = Union[Sequence[int], np.ndarray]
@@ -726,6 +727,171 @@ def wav2sig(insig, fs=None, dBFS=94):
     insig = np.asarray(insig)
 
     return insig, fs
+
+def buffer(x, n, p=0, opt='nodelay'):
+    """
+    Matlab-like buffer function implementation
+    """
+    if opt == 'nodelay':
+        # Calculate number of columns
+        if p == 0:
+            # No overlap
+            cols = len(x) // n
+            # Truncate x to fit exactly
+            x_truncated = x[:cols * n]
+            return x_truncated.reshape((n, cols), order='F')
+        else:
+            # With overlap
+            step = n - p
+            if step <= 0:
+                raise ValueError("Overlap must be less than frame length")
+            
+            # Calculate number of frames
+            cols = (len(x) - p) // step
+            if cols <= 0:
+                cols = 1
+            
+            # Create buffered array
+            buffered = np.zeros((n, cols))
+            for i in range(cols):
+                start = i * step
+                end = start + n
+                if end <= len(x):
+                    buffered[:, i] = x[start:end]
+                else:
+                    # Pad with zeros if necessary
+                    remaining = len(x) - start
+                    buffered[:remaining, i] = x[start:]
+            
+            return buffered
+    else:
+        raise NotImplementedError("Only 'nodelay' option is implemented")
+
+# -------------------
+#### Ossess 2016 ####
+# -------------------
+
+def cos_ramp(sig_len=None, fs=None, attack=None, release=None, plot_result=False):
+    """
+    Generate a cosine-shaped ramp for audio signal processing
+    
+    Parameters:
+    sig_len: signal length (default: 44100)
+    fs: sampling frequency (default: 44100)
+    attack: attack time in ms (default: 25)
+    release: release time in ms (default: 25)
+    plot_result: whether to plot the result (default: False)
+    
+    Returns:
+    ramp: the generated ramp signal
+    """
+    
+    nargin = 0
+    if sig_len is not None:
+        nargin += 1
+    if fs is not None:
+        nargin += 1
+    if attack is not None:
+        nargin += 1
+    if release is not None:
+        nargin += 1
+    
+    if nargin < 1 or sig_len is None:
+        sig_len = 44100  # only for demo
+    
+    if nargin < 2 or fs is None:
+        fs = 44100
+    
+    if nargin < 3 or attack is None:
+        attack = 25
+    
+    if nargin < 4 or release is None:
+        release = 25
+    
+    attack = round(fs * attack / 1000)
+    ramp = np.ones(sig_len)
+    
+    if attack >= sig_len:
+        print('Attack: %i, Signal: %i' % (attack, len(ramp)))
+        attack = round((sig_len - 1) / 2)
+        print('Attack changed to: %i, %.4f (msec)' % (attack, 1000/fs*attack))
+    
+    if nargin == 4:  # attack and release time are different
+        for i in range(1, attack + 1):
+            ramp[i-1] = ramp[i-1] * 0.5 * (1 - np.cos(np.pi * i / attack))
+        
+        release = round(fs * release / 1000)
+        for i in range(sig_len - release, sig_len + 1):
+            if i <= sig_len:  # bounds check
+                ramp[i-1] = ramp[i-1] * 0.5 * (1 - np.cos(np.pi * (i - sig_len) / release))
+    else:  # attack and release time are the same
+        for i in range(1, attack + 1):
+            ramp[i-1] = ramp[i-1] * 0.5 * (1 - np.cos(np.pi * i / attack))
+        
+        for i in range(sig_len - attack, sig_len + 1):
+            if i <= sig_len:  # bounds check
+                ramp[i-1] = ramp[i-1] * 0.5 * (1 - np.cos(np.pi * (i - sig_len) / attack))
+    
+    if attack == 0 or release == 0:
+        ramp[-1] = 1  # ramp(end) in Matlab becomes ramp[-1] in Python
+    
+    # Plotting functionality (equivalent to nargout == 0 check)
+    if plot_result:
+        t = np.arange(1, sig_len + 1) / fs
+        plt.figure()
+        plt.plot(t, ramp)
+        plt.xlabel('time [s]')
+        plt.ylabel('Amplitude')
+        plt.show()
+    
+    return ramp
+
+def rmsdb(x, fs=None, ti=None, tf=None):
+    
+    if isinstance(x, str):
+        try:
+            fs, x = wavfile.read(x)
+            x = x.astype(np.float64)
+        except:
+            raise ValueError('variable x interpreted as char, but no wav file with such a name was found')
+    
+    # Convert to numpy array for consistent handling
+    x = np.array(x)
+    
+    if tf is None:
+        Nf = len(x)
+    else:
+        Nf = round(tf * fs)
+    
+    if ti is None:
+        Ni = 0  # Python uses 0-based indexing, so equivalent to Matlab's 1
+    else:
+        Ni = int(np.ceil(ti * fs + 1e-6)) - 1  # Convert from 1-based to 0-based indexing
+        Ni = max(0, Ni)  # Ensure minimum index is 0
+    
+    # Get dimensions equivalent to Matlab's [r,c]=size(x)
+    if x.ndim == 1:
+        r = len(x)
+        c = 1
+        x = x.reshape(-1, 1)  # Make it a column vector for consistency
+    else:
+        r, c = x.shape
+    
+    if c == 1:
+        # Column vector case: y = 10*log10( x(Ni:Nf)'*x(Ni:Nf)/length(x(Ni:Nf)) )
+        x_segment = x[Ni:Nf].flatten()
+        y = 10 * np.log10(np.dot(x_segment, x_segment) / len(x_segment))
+    elif r == 1:
+        # Row vector case: Nf = c; y = 10*log10( x(Ni:Nf)*x(Ni:Nf)'/length(x(Ni:Nf)) )
+        Nf = c
+        x_segment = x.flatten()[Ni:Nf]
+        y = 10 * np.log10(np.dot(x_segment, x_segment) / len(x_segment))
+    else:
+        # Generic case: y = 10*log10( sum(x(Ni:Nf,:).*x(Ni:Nf,:))/length(x(Ni:Nf,:)) )
+        x_segment = x[Ni:Nf, :]
+        y = 10 * np.log10(np.sum(x_segment * x_segment) / len(x_segment))
+    
+    return y
 
 # ----------------------
 #### EPNL FUNCTIONS ####
@@ -1746,141 +1912,4 @@ def shm_signal_segment(
 # ------------------
 
 if __name__ == "__main__":
-    print("Validating")
-    #see("sound_files\ExSignal_A320_auralized_departure_104dBFS.wav")
-
-    # z = hz2bark(1000)
-    # print(z)
-    # f = bark2hz(z)
-    # print(f)
-
-    # x = np.linspace(0, 10, 101)
-    # y = np.exp(-((x - 5)**2) / (2 * 2**2))  # same as gaussmf(x, [2, 5])
-    # p5 = get_exceeded_value(y, 5)
-    # p90 = get_exceeded_value(y, 90)
-    # print(p5,p90)
-    # plt.plot(x, y, label='Signal')
-    # plt.axhline(p5, color='r', linestyle='--', label='5% exceedance')
-    # plt.axhline(p90, color='g', linestyle='--', label='90% exceedance')
-    # plt.legend()
-    # plt.title("Exceedance Thresholds")
-    # plt.show()
-
-    # sr, input = wavfile.read('sound_files\ExSignal_A320_auralized_departure_104dBFS.wav')
-    # print(sr, input.shape)
-    # print(input)
-    # output = get_statistics(input, 'test')
-    # print(output)
-
-    # N       = 1024
-    # qb      = np.arange(1, 11)         # pretend we want the first ten bins
-    # freqs   = qb * (44100 / N)         # Hz for those bins at 44.1 kHz Fs
-    # bark, table = get_bark(N, qb, freqs)
-    # print("Bark values at qb:\n", bark[qb])
-
-    #print(from_db(123,10))
-
-    # fs, N = 44_100, 4096
-    # B1, f, a0_fastl = calculate_a0(fs, N)
-    # B2, _, a0_osses = calculate_a0(fs, N, 'fluctuationstrength_osses2016')
-    # import matplotlib.pyplot as plt
-    # plt.plot(f, 20*np.log10(a0_fastl), label='Fastl 2007')
-    # plt.plot(f, 20*np.log10(a0_osses), '--', label='Osses 2016')
-    # plt.xlabel('Frequency [Hz]'); plt.ylabel('Magnitude [dB]')
-    # plt.ylim([-100, 10]); plt.grid(True); plt.legend(); plt.show()
-
-    # fs = 48000                                # 48 kHz sample rate
-    # t  = np.arange(0, 1.0, 1/fs)              # 1-s test tone
-    # ref = 0.1 * np.sin(2*np.pi*1000*t)        # rms = 0.1/√2 ≈ 0.0707
-    # inp = 0.05 * np.sin(2*np.pi*500*t)      # random “measurement” signal
-    # cal_sig, g, dbfs = calibrate(inp, ref, 94, return_dbfs=True)
-    # print(f"Gain applied: {g:.3f}")
-    # print(f"0 dBFS equals {dbfs:.2f} dB SPL")
-    # print(f"Calibrated signal rms: {np.sqrt(np.mean(cal_sig**2)):.4f}")
-
-    # model = "Sharpness_DIN45692"
-    # parameters = get_defaults(model)
-    # for key, value in parameters.items():
-    #     print(f"{key}: {value}")
-
-    # sr = 48_000
-    # duration = 1.0
-    # x = np.random.randn(int(sr * duration))
-    # y = shm_auditory_filt_bank(x, outplot=True)
-    # plt.show()
-    # sf.write("band01.wav", y[:, 0] / np.max(np.abs(y[:, 0])) * 0.99, sr)
-
-    # np.random.seed(0)
-    # sig2d = np.random.randn(1024, 8) * 0.02
-    # rect, loud, rms = shm_basis_loudness(sig2d, 1027.02470862)
-    # print("2‑D test shapes:", rect.shape, loud.shape, rms.shape)
-    # print("2‑D loudness ≥ 0:", np.all(loud >= 0))
-    # sig3d = np.random.randn(1024, 8, 53) * 0.02
-    # rect3, loud3, rms3 = shm_basis_loudness(sig3d)
-    # print("3‑D test shapes:", rect3.shape, loud3.shape, rms3.shape)
-    # print("3‑D loudness ≥ 0:", np.all(loud3 >= 0))
-    # assert rect.shape == sig2d.shape and rect3.shape == sig3d.shape
-    # assert loud.min() >= 0 and loud3.min() >= 0
-    # print("Basic sanity checks passed.")
-
-    # fs = 48_000
-    # t = np.linspace(0, 0.5, int(0.5 * fs), endpoint=False)
-    # tone = 0.5 * np.sin(2 * np.pi * 6_000 * t)
-    # noisy = tone + 0.1 * np.random.randn(t.size)
-    # clean = shm_noise_red_lowpass(noisy, fs)
-    # plt.figure()
-    # plt.title("ECMA‑418‑2 low‑pass noise reduction")
-    # plt.plot(t, noisy, alpha=0.4, label="Noisy input")
-    # plt.plot(t, clean, linewidth=1.2, label="Filtered output")
-    # plt.legend()
-    # plt.xlabel("Time [s]")
-    # plt.tight_layout()
-    # plt.show()
-
-    # fs = 48_000
-    # x = np.random.randn(fs)
-    # y = shm_out_mid_ear_filter(x, fieldtype="free-frontal", outplot=True)
-    # print("Processed", y.shape, "samples")
-
-    # np.random.seed(42)
-    # x = np.random.randn(10_000)
-    # y = shm_preproc(x, block_size=2048, hop_size=1024)
-    # print(f"Input  shape : {x.shape}")
-    # print(f"Output shape : {y.shape}")
-    # print(f"First 5 out samples : {y[:5]}")
-    # print(f"Last  5 out samples : {y[-5:]}")
-    # print(x)
-    # print(y)
-    # from scipy.io import savemat
-    # savemat("shm_preproc_test.mat", {"x_py": x, "y_py": y})
-    # print("\nSaved shm_preproc_test.mat for MATLAB cross-check")
-
-    # audio, sr = sf.read("sound_files\ExSignal_A320_auralized_departure_104dBFS.wav")
-    # audio_48k, _ = shm_resample(audio, sr)
-    # sf.write("output_48k.wav", audio_48k, 48_000)
-    # audio2, sr2 = sf.read("output_48k.wav")
-    # print(sr,sr2)
-
-    # spec = np.array([[0.0, 0.0],
-    #                 [1.0, 0.5],
-    #                 [0.5, 0.2],
-    #                 [1.2, 0.1]])
-    # out = shm_rough_low_pass(spec, 50.0, 0.02, 0.10)
-    # print(out,out.shape)
-
-    # f_p = np.linspace(1, 300, 500)
-    # f_max = 70.0
-    # alpha_vec = np.full_like(f_p, 1.5)
-    # beta_vec = np.full_like(f_p, 0.8)
-    # params = np.stack((alpha_vec, beta_vec)) 
-    # w = shm_rough_weight(f_p, f_max, params)
-    # print("First five weights:", w[:5])
-
-    # fs = 48_000
-    # t = np.arange(0, 1.0, 1 / fs)
-    # x  = np.stack((np.sin(2 * np.pi * 440 * t),
-    #                np.sin(2 * np.pi * 880 * t)), axis=-1)
-    # blocks, idx = shm_signal_segment(x, axisn=0, block_size=4096,
-    #                              overlap=0.75, i_start=0, end_shrink=False)
-    # print("blocks shape:", blocks.shape)
-    # print("block starts:", idx[:4], "…")
+    print("utilities.py")

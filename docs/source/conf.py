@@ -1,40 +1,39 @@
 # Configuration file for the Sphinx documentation builder.
+#
+# For the full list of built-in configuration values, see the documentation:
+# https://www.sphinx-doc.org/en/master/usage/configuration.html
+
+
+import os
+import sys
+sys.path.insert(0, os.path.abspath('../..'))  # root directory of your project
 
 # -- Project information -----------------------------------------------------
+# https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
+
 project = 'SQUAT4PY'
 copyright = '2025, Gerard Mendoza Ferrandis'
 author = 'Gerard Mendoza Ferrandis'
-release = '0.1'
+release = '0'
 
 # -- General configuration ---------------------------------------------------
+# https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
+
 extensions = [
     'sphinx.ext.autodoc',
-    'sphinx.ext.napoleon',
-    'sphinx.ext.viewcode',
-    'sphinx.ext.todo',
+    'sphinx.ext.napoleon',  # for Google/NumPy docstrings
+    'sphinx.ext.viewcode',  # optional: links to source code
+    'sphinx.ext.autosummary'  # optional: summaries
 ]
 
+
 templates_path = ['_templates']
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
+exclude_patterns = []
+
+
 
 # -- Options for HTML output -------------------------------------------------
-html_theme = 'sphinx_rtd_theme'
+# https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
+
+html_theme = 'alabaster'
 html_static_path = ['_static']
-
-# -- Autodoc configuration ---------------------------------------------------
-autodoc_default_options = {
-    'members': True,
-    'undoc-members': True,
-    'private-members': True,
-    'special-members': '__init__',
-    'inherited-members': True,
-    'show-inheritance': True,
-}
-
-# -- TODO configuration ------------------------------------------------------
-todo_include_todos = True
-
-# -- Add paths for modules ---------------------------------------------------
-import os
-import sys
-sys.path.insert(0, os.path.abspath('../../SQAT4PY'))
