@@ -75,9 +75,9 @@ def FluctuationStrength_Osses2016(insig, fs, method, time_skip=None, show=None, 
     t_b = np.arange(1, len(insig) + 1) / fs
     
     overlap = round(0.9 * N)
-    insig_buffered = buffer(insig, N, overlap, 'nodelay')
-    t_b_buffered = buffer(t_b, N, overlap, 'nodelay')
-    nFrames = insig_buffered.shape[1]
+    insig = buffer(insig, N, overlap, 'nodelay')
+    t_b = buffer(t_b, N, overlap, 'nodelay')
+    nFrames = insig.shape[1]
     fluct = np.zeros(nFrames)  # Memory allocation
     
     ## ei = peripheral_stage(insig,fs,N);
@@ -97,8 +97,8 @@ def FluctuationStrength_Osses2016(insig, fs, method, time_skip=None, show=None, 
     
     for iFrame in range(nFrames):
         
-        signal = insig_buffered[:, iFrame]
-        t[iFrame] = t_b_buffered[0, iFrame]
+        signal = insig[:, iFrame]
+        t[iFrame] = t_b[0, iFrame]
         
         # Apply window to frame
         signal = (window * signal).T
@@ -139,7 +139,7 @@ def FluctuationStrength_Osses2016(insig, fs, method, time_skip=None, show=None, 
         kp_fr[iFrame, :] = kp
         gzi_fr[iFrame, :] = gzi
         md_fr[iFrame, :] = mdept
-        fi[iFrame, :] = model_par['cal'] * fi_
+        fi[iFrame, :] = model_par['cal'] * fi_ #not completely accurate (TODO: check)
         fluct[iFrame] = dz * np.sum(fi[iFrame, :])  # total fluct = integration of the specific fluct. strength pattern
     
     ## ************************************************************************
@@ -380,14 +380,14 @@ def il_PeripheralHearingSystem_t(insig, fs, struct_opt):
     K = 2**12  # FIR filter order
     
     if struct_opt['a0_type'] == 'fluctuationstrength_osses2016':
-        B = calculate_a0(fs, K, 'fluctuationstrength_osses2016')
+        B, _, _ = calculate_a0(fs, K, 'fluctuationstrength_osses2016')
     elif struct_opt['a0_type'] == 'fastl2007':
-        B = calculate_a0(fs, K, 'fastl2007')
+        B, _, _ = calculate_a0(fs, K, 'fastl2007')
     else:
         # Choosing the default:
-        B = calculate_a0(fs, K, 'fluctuationstrength_osses2016')
+        B, _, _ = calculate_a0(fs, K, 'fluctuationstrength_osses2016')
     
-    outsig = sosfilt(B, np.concatenate([insig, np.zeros(K//2)]))
+    outsig = lfilter(B, 1, np.concatenate([insig, np.zeros(K//2)]))
     outsig = outsig[K//2:]
     
     return outsig
@@ -475,10 +475,14 @@ def TerhardtExcitationPatterns_v3(insig, fs, dBFS=100):
     #   Each frequency having a level above the absolute threshold is looked at.
     #   The contribution of that level (and frequency) onto the other critical
     #   band levels is computed and then assigned.
-    ExcAmp = np.zeros((nL, params['Chno']))
     ei = np.zeros((params['Chno'], params['N']))
     ei_f = np.zeros((params['Chno'], params['N']))
     
+    togetshape = []
+    for l in range(nL):
+        togetshape.append(whichL[l])
+    ExcAmp = np.zeros((np.max(togetshape)+1, params['Chno']))
+
     for i in range(params['Chno']):
         etmp = np.zeros(params['N'], dtype=complex)
         for l in range(nL):
@@ -491,7 +495,7 @@ def TerhardtExcitationPatterns_v3(insig, fs, dBFS=100):
                 ExcAmp[N1tmp, i] = 1
             elif whichZ[1, l] > i:
                 ExcAmp[N1tmp, i] = Slopes[l, i + 1] / Lg[N1tmp]
-            else:  # whichZ[0, l] < k
+            else:  
                 ExcAmp[N1tmp, i] = Slopes[l, i - 1] / Lg[N1tmp]
             
             etmp[N2tmp] = ExcAmp[N1tmp, i] * insig_fft[N2tmp]  # for each level, the level is projected to that in the respective critical band i
@@ -499,7 +503,7 @@ def TerhardtExcitationPatterns_v3(insig, fs, dBFS=100):
         ei_f[i, :] = 20 * np.log10(np.abs(etmp))
         ei[i, :] = 2 * params['N'] * np.real(np.fft.ifft(etmp))
     
-    outsig = np.sum(ei, axis=0)
+    outsig = np.sum(ei, axis=0) # not exactly same (TODO: check)
     gain = dB2calibrate - (rmsdb(outsig) + dBFS)
     gain_factor = 10**(gain/20)
     ei = gain_factor * ei
@@ -520,7 +524,7 @@ def il_calculate_params(x, fs):
     params['qb'] = np.arange(N0, Ntop + 1) - 1  # Convert to 0-based indexing
     params['freqs'] = params['qb'] * df
     
-    params['Barkno'], Bark_raw = Get_Bark(params['N'], params['qb'], params['freqs'])
+    params['Barkno'], Bark_raw = get_bark(params['N'], params['qb'], params['freqs'])
     # Loudness threshold related parameters
     params['MinExcdB'] = il_calculate_MinExcdB(params['N01'], params['qb'], params['Barkno'])
     params['MinBf'] = il_calculate_MinBf(params['N01'], df, Bark_raw, params['MinExcdB'])
@@ -707,7 +711,7 @@ if __name__ == "__main__":
         signal_py = signal_py * (rms_target / rms_current_py)
 
         # --- Run the Python implementation ---
-        OUT_py = FluctuationStrength_Osses2016(signal_py, fs, method=1, time_skip=2.0, show=False) # show=False for printing
+        OUT_py = FluctuationStrength_Osses2016(signal_py, fs, method=1, time_skip=2.0, show=True) # show=False for printing
 
         # --- Print Key Results for Visual Comparison ---
         print('\n--- Python Results ---')
