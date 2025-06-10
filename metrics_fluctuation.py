@@ -455,21 +455,24 @@ def TerhardtExcitationPatterns_v3(insig, fs, dBFS=100):
         Li = LdB[whichL[l]]
         zi = params['Barkno'][whichL[l] + N01]
         
-        for k in range(whichZ[0, l]):
+        for k in range(1, whichZ[0,l]+1):
+            k_idx = k-1
             zk = k * 0.5
             delta_z = zi - zk
             Stemp = (S1 * delta_z) + Li
-            if Stemp > params['MinBf'][k]:
-                Slopes[l, k] = 10**(Stemp/20)
-                Slopes_dB[l, k] = Stemp
+            if Stemp > params['MinBf'][k_idx]:
+                Slopes[l, k_idx]    = 10**(Stemp/20)
+                Slopes_dB[l,k_idx]  = Stemp
         
-        for k in range(whichZ[1, l], params['Chno']):
+        for k in range(whichZ[1, l], params['Chno']+1):
+            k_idx = k-1
             zk = k * 0.5
+            delta_z = zi - zk
             delta_z = zk - zi
             Stemp = S2[l] * delta_z + Li
             if Stemp > params['MinBf'][k]:
-                Slopes[l, k] = 10**(Stemp/20)
-                Slopes_dB[l, k] = Stemp
+                Slopes[l, k_idx] = 10**(Stemp/20)
+                Slopes_dB[l, k_idx] = Stemp
     
     # Excitation patterns:
     #   Each frequency having a level above the absolute threshold is looked at.
@@ -484,24 +487,24 @@ def TerhardtExcitationPatterns_v3(insig, fs, dBFS=100):
     ExcAmp = np.zeros((np.max(togetshape)+1, params['Chno']))
 
     for i in range(params['Chno']):
+        i_band = i + 1                                   # MATLAB band number
         etmp = np.zeros(params['N'], dtype=complex)
+
         for l in range(nL):
             N1tmp = whichL[l]
             N2tmp = N1tmp + N01
-            
-            if whichZ[0, l] == i:
+
+            if whichZ[0,l] == i_band or whichZ[1,l] == i_band:
                 ExcAmp[N1tmp, i] = 1
-            elif whichZ[1, l] == i:
-                ExcAmp[N1tmp, i] = 1
-            elif whichZ[1, l] > i:
-                ExcAmp[N1tmp, i] = Slopes[l, i + 1] / Lg[N1tmp]
-            else:  
-                ExcAmp[N1tmp, i] = Slopes[l, i - 1] / Lg[N1tmp]
-            
-            etmp[N2tmp] = ExcAmp[N1tmp, i] * insig_fft[N2tmp]  # for each level, the level is projected to that in the respective critical band i
-        
-        ei_f[i, :] = 20 * np.log10(np.abs(etmp))
-        ei[i, :] = 2 * params['N'] * np.real(np.fft.ifft(etmp))
+            elif whichZ[1,l] > i_band:
+                ExcAmp[N1tmp, i] = Slopes[l, i+1] / Lg[N1tmp]
+            else:
+                ExcAmp[N1tmp, i] = Slopes[l, i-1] / Lg[N1tmp]
+
+            etmp[N2tmp] = ExcAmp[N1tmp, i] * insig_fft[N2tmp]
+
+        ei_f[i,:] = 20*np.log10(np.abs(etmp))
+        ei[i,:]  = 2*params['N']*np.real(np.fft.ifft(etmp))
     
     outsig = np.sum(ei, axis=0) # not exactly same (TODO: check)
     gain = dB2calibrate - (rmsdb(outsig) + dBFS)
