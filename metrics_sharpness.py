@@ -16,68 +16,135 @@ from sound_metrics import *
 from utilities import *
 from metrics_loudness import Loudness_ISO532_1
 
-def Sharpness_DIN45692(insig=None, fs=None,weight_type=None, LoudnessField=None, 
-                      LoudnessMethod=None, time_skip=None, show_sharpness=None, show_loudness=None, dBFS=94, export_excel=None):
-    
-    # --- WAV file interface ---
-    if isinstance(insig, str):
-        insig, fs = wav2sig(insig, fs, dBFS)
+__all__ = ["Sharpness_DIN45692"]
+FloatArray = NDArray[np.floating]
 
-    elif fs is None:
-        raise ValueError("If insig is not a filename, fs must be provided.")
+def Sharpness_DIN45692(insig=None, fs=None, weight_type=None, LoudnessField=None, 
+                      LoudnessMethod=None, time_skip=None, show_sharpness=None, show_loudness=None, 
+                      dBFS=94, export_excel=None, SpecificLoudness=None, time=None):
+    """
+    Unified Sharpness calculation according to DIN45692 standard.
+    
+    This function can operate in two modes:
+    1. From audio signal: Computes loudness first, then sharpness
+    2. From specific loudness: Directly computes sharpness from pre-computed specific loudness
+    
+    Parameters:
+    -----------
+    insig : str or array-like, optional
+        Input signal (audio data) or filename
+    fs : float, optional
+        Sampling frequency (required if insig is audio data)
+    weight_type : str, optional
+        Weighting function type ('DIN45692', 'aures', 'bismarck')
+    LoudnessField : int, optional
+        Free field = 0; diffuse field = 1
+    LoudnessMethod : int, optional
+        Method for loudness calculation: stationary = 1; time varying = 2
+    time_skip : float, optional
+        Time to skip for statistics calculation
+    show_sharpness : bool, optional
+        Show sharpness plots
+    show_loudness : bool, optional
+        Show loudness results
+    dBFS : float, optional
+        dB Full Scale reference (default: 94)
+    export_excel : str, optional
+        Filename for Excel export
+    SpecificLoudness : np.ndarray, optional
+        Pre-computed specific loudness array
+    time : np.ndarray, optional
+        Time vector (required for time-varying specific loudness)
+    
+    Returns:
+    --------
+    OUT : dict
+        Dictionary containing sharpness results and statistics
+    """
+    
+    # Determine operation mode based on input
+    if SpecificLoudness is not None:
+        # Mode 2: From specific loudness
+        mode = 'from_loudness'
+    else:
+        # Mode 1: From audio signal
+        mode = 'from_signal'
+    
+    # Handle mode 1: From audio signal
+    if mode == 'from_signal':
+        # --- WAV file interface ---
+        if isinstance(insig, str):
+            insig, fs = wav2sig(insig, fs, dBFS)
 
-    # Get number of arguments passed
-    frame = sys._getframe()
-    args = frame.f_locals
-    nargin = sum(1 for v in [insig, fs, weight_type, LoudnessField, LoudnessMethod, time_skip, show_sharpness, show_loudness] if v is not None)
-    
-    if nargin == 0:
-        print(__doc__)
-        return
-    
-    if nargin < 8:
-        if 'return' not in str(frame.f_back.f_code.co_names):  # equivalent to nargout == 0 check
-            show_loudness = 1
+        elif fs is None:
+            raise ValueError("If insig is not a filename, fs must be provided.")
+
+        # Default show_loudness and show_sharpness if not explicitly provided
+        # This logic mimics MATLAB's nargout behavior
+        # Using inspect.currentframe() to check if a return value is expected is a heuristic
+        # and might not be robust in all Python contexts. Explicitly passing True/False is preferred.
+        if show_loudness is None:
+            # Heuristic: if called without assignment, assume display is desired
+            if 'return' not in str(inspect.currentframe().f_back.f_code.co_names):
+                show_loudness = True
+            else:
+                show_loudness = False
+        
+        if show_sharpness is None:
+            if 'return' not in str(inspect.currentframe().f_back.f_code.co_names):
+                show_sharpness = True
+            else:
+                show_sharpness = False
+
+        if LoudnessMethod == 1:  # stationary loudness calculation
+            
+            L = Loudness_ISO532_1(insig, fs,          # input signal and sampling freq.
+                                 LoudnessField,       # free field = 0; diffuse field = 1;
+                                 LoudnessMethod,      # method used for loudness calculation: stationary (from input 1/3 octave unweighted SPL)=0; stationary = 1; time varying = 2;
+                                 time_skip,           # time_skip
+                                 show_loudness)       # show loudness results
+            
+            n = L['SpecificLoudness'].shape[1]
+            loudness_sones = np.zeros((L['SpecificLoudness'].shape[0], 1))  # pre allocate memory
+            SpecificLoudness = L['SpecificLoudness']
+            
+            for i in range(L['SpecificLoudness'].shape[0]):
+                loudness_sones[i] = np.sum(L['SpecificLoudness'][i, :]) * 0.10
+            
+        elif LoudnessMethod == 2:  # time-varying loudness calculation
+            
+            L = Loudness_ISO532_1(insig, fs,          # input signal and sampling freq.
+                                 LoudnessField,       # free field = 0; diffuse field = 1;
+                                 LoudnessMethod,      # method used for loudness calculation: stationary (from input 1/3 octave unweighted SPL)=0; stationary = 1; time varying = 2;
+                                 time_skip,           # time_skip
+                                 show_loudness)       # show loudness results
+            
+            n = L['InstantaneousSpecificLoudness'].shape[1]
+            loudness_sones = np.zeros((L['InstantaneousSpecificLoudness'].shape[0], 1))  # pre allocate memory
+            SpecificLoudness = L['InstantaneousSpecificLoudness']
+            
+            for i in range(L['InstantaneousSpecificLoudness'].shape[0]):
+                loudness_sones[i] = np.sum(L['InstantaneousSpecificLoudness'][i, :]) * 0.10
+
+        z = np.linspace(0.1, 24, n)  # create bark axis
+        
+    else:
+        # Mode 2: From specific loudness
+        if show_sharpness is None:
+            show_sharpness = False # Default to False when SpecificLoudness is provided
+        
+        n = SpecificLoudness.shape[1]
+        z = np.linspace(0.1, 24, n)  # create bark axis
+
+        if SpecificLoudness.shape[0] == 1:  # define method based on the size of the input specific loudness
+            method = 0  # (stationary) - Specific loudness [1,sone/Bark]
         else:
-            show_loudness = 0
-    
-    if nargin < 7:
-        if 'return' not in str(frame.f_back.f_code.co_names):  # equivalent to nargout == 0 check
-            show_sharpness = 1
-        else:
-            show_sharpness = 0
+            method = 1  # (time-varying) - Instantaneous specific loudness [nTimeSteps,sone/Bark]
 
-    if LoudnessMethod == 1:  # stationary loudness calculation
-        
-        L = Loudness_ISO532_1(insig, fs,          # input signal and sampling freq.
-                             LoudnessField,       # free field = 0; diffuse field = 1;
-                             LoudnessMethod,      # method used for loudness calculation: stationary (from input 1/3 octave unweighted SPL)=0; stationary = 1; time varying = 2;
-                             time_skip,           # time_skip
-                             show_loudness)       # show loudness results
-        
-        n = L['SpecificLoudness'].shape[1]
-        loudness_sones = np.zeros((L['SpecificLoudness'].shape[0], 1))  # pre allocate memory
-        SpecificLoudness = L['SpecificLoudness']
-        
-        for i in range(L['SpecificLoudness'].shape[0]):
-            loudness_sones[i] = np.sum(L['SpecificLoudness'][i, :]) * 0.10
-        
-    elif LoudnessMethod == 2:  # time-varying loudness calculation
-        
-        L = Loudness_ISO532_1(insig, fs,          # input signal and sampling freq.
-                             LoudnessField,       # free field = 0; diffuse field = 1;
-                             LoudnessMethod,      # method used for loudness calculation: stationary (from input 1/3 octave unweighted SPL)=0; stationary = 1; time varying = 2;
-                             time_skip,           # time_skip
-                             show_loudness)       # show loudness results
-        
-        n = L['InstantaneousSpecificLoudness'].shape[1]
-        loudness_sones = np.zeros((L['InstantaneousSpecificLoudness'].shape[0], 1))  # pre allocate memory
-        SpecificLoudness = L['InstantaneousSpecificLoudness']
-        
-        for i in range(L['InstantaneousSpecificLoudness'].shape[0]):
-            loudness_sones[i] = np.sum(L['InstantaneousSpecificLoudness'][i, :]) * 0.10
+        loudness_sones = np.zeros((SpecificLoudness.shape[0], 1))  # pre allocate memory
 
-    z = np.linspace(0.1, 24, n)  # create bark axis
+        for i in range(SpecificLoudness.shape[0]):
+            loudness_sones[i] = np.sum(SpecificLoudness[i, :]) * 0.10
 
     ## Sharpness calculation ##########################################################
 
@@ -88,16 +155,19 @@ def Sharpness_DIN45692(insig=None, fs=None,weight_type=None, LoudnessField=None,
         
         s = np.zeros(SpecificLoudness.shape[0])
         for i in range(SpecificLoudness.shape[0]):
-            s[i] = k * np.sum(SpecificLoudness[i, :] * g * z * 0.10) / loudness_sones[i]
+            # Fix: Use .item() to get scalar from 1-element array
+            s[i] = k * np.sum(SpecificLoudness[i, :] * g * z * 0.10) / loudness_sones[i].item()
         
         ###############################################################################
     elif weight_type == 'aures':  # Aures model
         
         s = np.zeros(SpecificLoudness.shape[0])
-        g = np.zeros((SpecificLoudness.shape[0], len(z)))
+        g_sharpness_weights = np.zeros((SpecificLoudness.shape[0], len(z))) # This 'g' is for Sharpness_DIN45692 scope
         for i in range(SpecificLoudness.shape[0]):
-            g[i, :] = il_sharpWeights(z, 'aures', loudness_sones[i])  # calculate sharpness weighting factor
-            s[i] = 0.11 * np.sum(SpecificLoudness[i, :] * g[i, :] * z * 0.10) / loudness_sones[i]
+            # il_sharpWeights returns a 1D array for a single loudness value
+            g_sharpness_weights[i, :] = il_sharpWeights(z, 'aures', loudness_sones[i].item())  # calculate sharpness weighting factor
+            # Fix: Use .item() to get scalar from 1-element array
+            s[i] = 0.11 * np.sum(SpecificLoudness[i, :] * g_sharpness_weights[i, :] * z * 0.10) / loudness_sones[i].item()
         
         ###############################################################################
     elif weight_type == 'bismarck':  # von Bismarck
@@ -105,21 +175,35 @@ def Sharpness_DIN45692(insig=None, fs=None,weight_type=None, LoudnessField=None,
         
         s = np.zeros(SpecificLoudness.shape[0])
         for i in range(SpecificLoudness.shape[0]):
-            s[i] = 0.11 * np.sum(SpecificLoudness[i, :] * g * z * 0.10) / loudness_sones[i]
+            # Fix: Use .item() to get scalar from 1-element array
+            s[i] = 0.11 * np.sum(SpecificLoudness[i, :] * g * z * 0.10) / loudness_sones[i].item()
 
     ###############################################################################
     # Output struct for time-varying signals
 
-    if LoudnessMethod == 2:  # (time-varying sharpness)
+    # Determine if we're dealing with time-varying or stationary analysis
+    if mode == 'from_signal':
+        is_time_varying = (LoudnessMethod == 2)
+        time_vector = L['time'] if LoudnessMethod == 2 else None
+    else:
+        is_time_varying = (method == 1)
+        time_vector = time
+
+    if is_time_varying:  # (time-varying sharpness)
         
         OUT = {}
         OUT['InstantaneousSharpness'] = s  # instantaneous sharpness
-        OUT['time'] = L['time']            # time vector
-        OUT['loudness'] = L                # output struct from the loudness calculation
+        OUT['time'] = time_vector            # time vector
+        
+        if mode == 'from_signal':
+            OUT['loudness'] = L                # output struct from the loudness calculation
            
-       
         # get statistics from Time-varying sharpness (acum)
         #############################################
+
+        # Set default time_skip if not provided
+        if time_skip is None:
+            time_skip = 0
 
         idx = np.argmin(np.abs(OUT['time'] - time_skip))  # find idx of time_skip on time vector
 
@@ -134,7 +218,7 @@ def Sharpness_DIN45692(insig=None, fs=None,weight_type=None, LoudnessField=None,
             if fieldName not in OUT:  # Only copy if OUT does NOT already have this field
                 OUT[fieldName] = OUT_statistics[fieldName]
         
-        del OUT_statistics, metric_statistics, fields_OUT_statistics, fieldName
+        # del OUT_statistics, metric_statistics, fields_OUT_statistics, fieldName # Keep for debugging if needed
         #############################################
 
           
@@ -147,12 +231,14 @@ def Sharpness_DIN45692(insig=None, fs=None,weight_type=None, LoudnessField=None,
             plt.figure()
             plt.gcf().canvas.manager.set_window_title('Sharpness analysis (time-varying)')
             
-            plt.plot(L['time'], OUT['S5'] * np.ones(len(L['time'])), 'r--', label=f'$S_5$={OUT["S5"][0]:.3g}')
-            plt.plot(L['time'], s)
+            # Ensure S5 is treated correctly whether it's a scalar or array
+            s5_val = OUT['S5'][0] if isinstance(OUT['S5'], np.ndarray) else OUT['S5']
+            plt.plot(OUT['time'], s5_val * np.ones(len(OUT['time'])), 'r--', label=f'$S_5$={s5_val:.3g}')
+            plt.plot(OUT['time'], s)
             
             plt.xlabel('Time, $t$ (s)')
             plt.ylabel('Sharpness, $S$ (acum)')
-            plt.xlim([0, L['time'][-1]])
+            plt.xlim([0, OUT['time'][-1]])
             
             plt.legend(loc='best')
             plt.legend().set_frame_on(False)
@@ -160,19 +246,42 @@ def Sharpness_DIN45692(insig=None, fs=None,weight_type=None, LoudnessField=None,
             plt.gcf().patch.set_facecolor('white')
             plt.show()
         
-    elif LoudnessMethod == 1:  # (stationary sharpness)
+    else:  # (stationary sharpness)
         
         OUT = {}
-        OUT['Sharpness'] = s  # sharpness
+        if mode == 'from_signal':
+            OUT['Sharpness'] = s  # sharpness (will be a 1-element array)
+        else:
+            OUT['Sharpness'] = s[0]  # sharpness (scalar from 1-element array)
     
     if export_excel is not None:
         export_dict_to_excel(OUT, filename=f"{export_excel}")
 
     return OUT
-
+    
 def il_sharpWeights(z, type, N):
+    """
+    Calculate sharpness weighting factors according to different models.
+    
+    Parameters:
+    -----------
+    z : array-like
+        Bark frequency scale
+    type : str
+        Type of weighting ('standard', 'bismarck', 'aures')
+    N : scalar, list, or None
+        Loudness values. For 'aures' type:
+        - If scalar (or 1-element array/list): Calculates 1D weighting factors.
+        - If multi-element list/array: Calculates 2D weighting factors (time-varying).
+    
+    Returns:
+    --------
+    g : np.ndarray
+        Weighting factors (1D or 2D depending on 'type' and 'N' for 'aures').
+    """
 
-    g = np.zeros(len(z))
+    # Initial g is 1D, but might be reassigned to 2D later for 'aures'
+    g = np.zeros(len(z)) 
 
     if type == 'standard':  # Widmann model according to DIN 45692 (2009)
         g[z < 15.8] = 1
@@ -185,11 +294,46 @@ def il_sharpWeights(z, type, N):
         g[mask] = 0.2 * np.exp(0.308 * (z[mask] - 15)) + 0.8
 
     elif type == 'aures':    # Aure's model according to DIN 45692 (2009)
-        if np.isscalar(N):
-            N = [N]
-        for nt in range(len(N)):
-            g[nt, :] = 0.078 * (np.exp(0.171 * z) / z) * (N[nt] / np.log(0.05 * N[nt] + 1))
+        # Normalize N to a list of scalar values for consistent iteration
+        N_vals = []
+        if np.isscalar(N) or N is None:
+            N_vals = [N] if N is not None else [0] # Treat None as 0 loudness
+        elif isinstance(N, np.ndarray):
+            if N.ndim == 0: # 0-dim array (scalar)
+                N_vals = [N.item()]
+            elif N.ndim == 1 and N.shape[0] == 1: # 1-element 1D array
+                N_vals = [N.item()]
+            else: # Multi-element 1D array (time-varying)
+                N_vals = N.tolist() # Convert to list of scalars
+        elif isinstance(N, list):
+            N_vals = N
+        else: # Fallback for unexpected N types
+            N_vals = [0] # Default to 0 loudness
 
+        # Determine if the output 'g' should be 1D or 2D based on N_vals length
+        if len(N_vals) > 1: # Time-varying loudness, g_output should be 2D
+            g_output = np.zeros((len(N_vals), len(z)))
+            for nt_idx, N_val in enumerate(N_vals):
+                # Avoid division by zero or log of non-positive values
+                if N_val is not None and N_val > 0:
+                    log_term = np.log(0.05 * N_val + 1)
+                    if log_term > 0:
+                        g_output[nt_idx, :] = 0.078 * (np.exp(0.171 * z) / z) * (N_val / log_term)
+                    else:
+                        g_output[nt_idx, :] = 0 # Handle log_term <= 0
+                else:
+                    g_output[nt_idx, :] = 0 # Handle N_val <= 0 or None
+            g = g_output # Reassign g to the 2D output
+        else: # Stationary loudness (N_vals has one element), g remains 1D
+            N_val = N_vals[0] if N_vals else 0 # Get the single value, default to 0 if list is empty
+            if N_val is not None and N_val > 0:
+                log_term = np.log(0.05 * N_val + 1)
+                if log_term > 0:
+                    g = 0.078 * (np.exp(0.171 * z) / z) * (N_val / log_term)
+                else:
+                    g = np.zeros_like(z)
+            else:
+                g = np.zeros_like(z)
     return g
 
 check_which = 1
@@ -199,7 +343,7 @@ if __name__ == "__main__":
 
         print("metrics_sharpness.py")
     
-    elif check_which == 1: # Sharpness_DIN45692
+    elif check_which == 1: # Sharpness_DIN45692 (regular / wavfile)
         with_wavfile = 0
 
         """
@@ -209,7 +353,7 @@ if __name__ == "__main__":
         Generates a narrowband, 1 kHz sinusoid with 160 Hz bandwidth at 60 dB SPL, sampled at 48 kHz.
         """
 
-        print("Running Sharpness_DIN45692 test...")
+        print("Running Sharpness_DIN45692 test (from WAV/signal)...")
 
 
         # Define parameters for the narrowband noise
@@ -249,9 +393,9 @@ if __name__ == "__main__":
         insig = insig.astype(np.float32) # Ensure float32 as in your example
 
         if with_wavfile == 1:
-            wavfile.write("test_S1.wav", fs, insig)
+            wavfile.write("test_S1a.wav", fs, insig)
             OUT = Sharpness_DIN45692(
-                insig="test_S1.wav",
+                insig="test_S1a.wav",
                 fs=fs,
                 weight_type='DIN45692', # Example: 'DIN45692', 'bismarck', or 'aures'
                 LoudnessField=0,        # 0 for free field, 1 for diffuse field
@@ -260,8 +404,8 @@ if __name__ == "__main__":
                 show_sharpness=True,    # Display sharpness results
                 show_loudness=False     # Display loudness results
             )
+            os.remove("test_S1a.wav") if os.path.exists("test_S1a.wav") else None
         else:
-            os.remove("test_S1.wav") if os.path.exists("test_S1.wav") else None
             OUT = Sharpness_DIN45692(
                 insig=insig,
                 fs=fs,
@@ -279,7 +423,73 @@ if __name__ == "__main__":
             print(f"  Mean Sharpness (Smean): {OUT['Smean'][0]:.3f} acum")
             print(f"  S5 Sharpness: {OUT['S5'][0]:.3f} acum")
         elif 'Sharpness' in OUT:
+            # For stationary, s is a 1-element array, so [0] is needed
             print(f"  Stationary Sharpness: {OUT['Sharpness'][0]:.3f} acum")
         else:
             print("  No sharpness output found (check LoudnessMethod).")
 
+    elif check_which == 2: # Sharpness_DIN45692 (loudness)
+
+        """
+        Validation clip for Sharpness_DIN45692 (loudness)
+        -----------------------------------
+        Tests the function when SpecificLoudness and time are provided directly.
+        """
+        print("Running Sharpness_DIN45692 test (from SpecificLoudness)...")
+
+        # --- Test Case 1: Stationary Specific Loudness ---
+        print("\n--- Test Case 1: Stationary Sharpness ---")
+        # Simulate SpecificLoudness for a stationary signal (1 time step, 24 bark bands)
+        # Values are arbitrary for testing, but should be positive
+        stationary_specific_loudness = np.array([[
+            0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 
+            1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0, 
+            2.1, 2.2, 2.3, 2.4
+        ]]) # Shape (1, 24)
+
+        out_stationary = Sharpness_DIN45692(
+            SpecificLoudness=stationary_specific_loudness,
+            weight_type='DIN45692', # Test with DIN45692
+            show_sharpness=False # No plot for stationary
+        )
+        print("Stationary Sharpness Results (OUT):")
+        if 'Sharpness' in out_stationary:
+            print(f"  Calculated Stationary Sharpness: {out_stationary['Sharpness']:.3f} acum")
+        else:
+            print("  Error: Stationary sharpness not found in output.")
+
+        # --- Test Case 2: Time-Varying Specific Loudness ---
+        print("\n--- Test Case 2: Time-Varying Sharpness ---")
+        # Simulate SpecificLoudness for a time-varying signal
+        num_time_steps = 50
+        num_bark_bands = 24
+        time_duration = 5.0 # seconds
+        time_vector = np.linspace(0, time_duration, num_time_steps)
+
+        # Create a specific loudness that changes over time
+        # For example, increasing loudness then decreasing
+        time_varying_specific_loudness = np.zeros((num_time_steps, num_bark_bands))
+        for i in range(num_time_steps):
+            # Simulate a peak around the middle of the time series
+            factor = 1 + np.sin(time_vector[i] / time_duration * 2 * np.pi) * 0.5
+            time_varying_specific_loudness[i, :] = (np.random.rand(num_bark_bands) * 0.5 + 0.1) * factor
+        
+        # Ensure no zero or negative values for robustness, especially for 'aures'
+        time_varying_specific_loudness[time_varying_specific_loudness <= 0] = 0.01
+
+        out_time_varying = Sharpness_DIN45692(
+            SpecificLoudness=time_varying_specific_loudness,
+            weight_type='aures', # Test with Aures model for time-varying
+            time=time_vector,
+            time_skip=1.0, # Skip first 1 second for statistics
+            show_sharpness=True # Show plot for time-varying
+        )
+
+        print("Time-Varying Sharpness Results (OUT):")
+        if 'InstantaneousSharpness' in out_time_varying:
+            print(f"  Instantaneous Sharpness (first 5 values): {out_time_varying['InstantaneousSharpness'][:5]}")
+            print(f"  Mean Sharpness (Smean): {out_time_varying['Smean'][0]:.3f} acum")
+            print(f"  S5 Sharpness: {out_time_varying['S5'][0]:.3f} acum")
+            print(f"  Time vector length: {len(out_time_varying['time'])}")
+        else:
+            print("  Error: Time-varying sharpness not found in output.")
