@@ -722,10 +722,11 @@ if __name__ == "__main__":
         rms_current_py = np.sqrt(np.mean(signal_py**2))
         signal_py = signal_py * (rms_target / rms_current_py)
 
-        wavfile.write('test_signal_py.wav', fs, signal_py.astype(np.float32))
+        #wavfile.write('test_signal_py.wav', fs, signal_py.astype(np.float32))
 
         # --- Run the Python implementation ---
-        OUT_py = FluctuationStrength_Osses2016(signal_py, fs, method=1, time_skip=2.0, show=True) # show=False for printing
+        OUT_py = FluctuationStrength_Osses2016(signal_py, fs, method=1, time_skip=2.0, show=True)
+        #OUT_py = FluctuationStrength_Osses2016('test_signal_py.wav', fs, method=1, time_skip=2.0, show=True)
 
         # --- Print Key Results for Visual Comparison ---
         print('\n--- Python Results ---')
