@@ -486,6 +486,7 @@ if __name__ == "__main__":
         print("metrics_roughness.py")
     
     elif check_which == 1: # Roughness_Daniel1997
+        with_wavfile = 0
 
         """
         Validation clip for Roughness_Daniel1997
@@ -499,17 +500,22 @@ if __name__ == "__main__":
         fs = 48_000
         f_mod = 70
         f_carrier = 1_000.0
+        L = 60 # dB SPL
 
-        p_rms = 20e-6 * 10**(60 / 20)
+        p_rms = 20e-6 * 10**(L / 20)
         A = p_rms * np.sqrt(2)
         t = np.arange(0.0, 2, 1 / fs)
         envelope = 0.5 * (1.0 + np.sin(2 * np.pi * f_mod * t))
         signal = A * envelope * np.sin(2 * np.pi * f_carrier * t)
         insig = signal.astype(np.float32)
-        #wavfile.write("am_1kHz_70Hz_60dB.wav", fs, signal.astype(np.float32))
 
-        OUT = Roughness_Daniel1997(insig, fs, time_skip=0.0, show=True)
-        #OUT = Roughness_Daniel1997("am_1kHz_70Hz_60dB.wav", fs, time_skip=0.0, show=True)
+        if with_wavfile == 1:
+            wavfile.write("test_R1.wav", fs, insig)
+            OUT = Roughness_Daniel1997("test_R1.wav", fs, time_skip=0.0, show=True)
+
+        else:
+            os.remove("test_R1.wav") if os.path.exists("test_R1.wav") else None
+            OUT = Roughness_Daniel1997(insig, fs, time_skip=0.0, show=True)
 
         print(f"  Mean roughness  : {OUT['Rmean']} asper")
         print(f"  Max  roughness  : {OUT['Rmax']} asper")
