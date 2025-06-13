@@ -705,8 +705,7 @@ if __name__ == "__main__":
     elif check_which == 1: # FluctuationStrength_Osses2016 (original test case)
         with_wavfile = 0
 
-        # --- Generate the exact same input signal (MUST MATCH MATLAB) ---
-        fs = 44100
+        fs = 48000
         duration = 5.0
         t_py = np.linspace(0, duration, int(fs * duration), endpoint=False)
 
@@ -714,7 +713,6 @@ if __name__ == "__main__":
         f_mod = 4  # Hz
         mod_index = 1.0
 
-        # Generate AM tone
         signal_py = (1 + mod_index * np.sin(2 * np.pi * f_mod * t_py)) * np.sin(2 * np.pi * f_carrier * t_py)
 
         # Set to 60 dB SPL (0.02 Pa RMS)

@@ -492,7 +492,7 @@ if __name__ == "__main__":
         Validation clip for Roughness_Daniel1997
         -----------------------------------
 
-        Generates a 2-second, 1 kHz sinusoid with 70 Hz amplitude modulation at 60 dB SPL, sampled at 48 kHz.
+        Generates a 5-second, 1 kHz sinusoid with 70 Hz amplitude modulation at 60 dB SPL, sampled at 48 kHz.
         """
 
         print("Running Roughness_Daniel1997 test...")
@@ -504,7 +504,8 @@ if __name__ == "__main__":
 
         p_rms = 20e-6 * 10**(L / 20)
         A = p_rms * np.sqrt(2)
-        t = np.arange(0.0, 2, 1 / fs)
+
+        t = np.arange(0.0, 5, 1 / fs)
         envelope = 0.5 * (1.0 + np.sin(2 * np.pi * f_mod * t))
         signal = A * envelope * np.sin(2 * np.pi * f_carrier * t)
         insig = signal.astype(np.float32)
@@ -512,9 +513,9 @@ if __name__ == "__main__":
         if with_wavfile == 1:
             wavfile.write("test_R1.wav", fs, insig)
             OUT = Roughness_Daniel1997("test_R1.wav", fs, time_skip=0.0, show=True)
-
-        else:
             os.remove("test_R1.wav") if os.path.exists("test_R1.wav") else None
+        
+        else:
             OUT = Roughness_Daniel1997(insig, fs, time_skip=0.0, show=True)
 
         print(f"  Mean roughness  : {OUT['Rmean']} asper")

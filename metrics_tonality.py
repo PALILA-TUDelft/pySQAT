@@ -640,8 +640,8 @@ if __name__ == "__main__":
 
         print("Running Tonality_Aures1985 test...")
 
-        fs = 44100              # Sampling rate in Hz
-        duration = 1.0          # Duration in seconds
+        fs = 48000              # Sampling rate in Hz
+        duration = 5.0          # Duration in seconds
         f0 = 1000               # Frequency of pure tone (Hz)
         Lp = 60                 # Desired sound pressure level (dB SPL)
         pref = 20e-6            # Reference pressure in Pa

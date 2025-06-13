@@ -397,7 +397,7 @@ if __name__ == "__main__":
             OUT = Sharpness_DIN45692(
                 insig="test_S1a.wav",
                 fs=fs,
-                weight_type='DIN45692', # Example: 'DIN45692', 'bismarck', or 'aures'
+                weight_type='aures', # Example: 'DIN45692', 'bismarck', or 'aures'
                 LoudnessField=0,        # 0 for free field, 1 for diffuse field
                 LoudnessMethod=2,       # 1 for stationary, 2 for time-varying
                 time_skip=0.5,          # Skip first 0.5 seconds for statistics (if LoudnessMethod=2)
@@ -409,7 +409,7 @@ if __name__ == "__main__":
             OUT = Sharpness_DIN45692(
                 insig=insig,
                 fs=fs,
-                weight_type='DIN45692', # Example: 'DIN45692', 'bismarck', or 'aures'
+                weight_type='aures', # Example: 'DIN45692', 'bismarck', or 'aures'
                 LoudnessField=0,        # 0 for free field, 1 for diffuse field
                 LoudnessMethod=2,       # 1 for stationary, 2 for time-varying
                 time_skip=0.5,          # Skip first 0.5 seconds for statistics (if LoudnessMethod=2)

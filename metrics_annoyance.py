@@ -322,17 +322,18 @@ if __name__ == "__main__":
 
         if type_wave == 0: # Pure Sine Wave
             fs = 48000
-            duration = 3.0
+            duration = 5.0
             frequency = 1000
             amplitude = 0.1
             t = np.arange(0, duration, 1/fs)
             insig_sine = amplitude * np.sin(2 * np.pi * frequency * t)
 
             OUT_sine = PsychoacousticAnnoyance_Di2016(insig_sine, fs, LoudnessField=0, time_skip=0.5, showPA=True, show=True)
+            print(OUT_sine['PAmean'].item())
 
         if type_wave == 1: # Amplitude Modulated Sine Wave
             fs = 48000
-            duration = 3.0
+            duration = 5.0
             carrier_freq = 1000
             mod_freq = 4
             amplitude = 0.1
@@ -344,10 +345,11 @@ if __name__ == "__main__":
             insig_am = amplitude * modulator * carrier
 
             OUT_am = PsychoacousticAnnoyance_Di2016(insig_am, fs, LoudnessField=0, time_skip=0.5, showPA=True, show=True)
+            print(OUT_am['PAmean'].item())
 
         if type_wave == 2: # Frequency Modulated Sine Wave # TODO: Check as looks like some metrics are off.
             fs = 48000
-            duration = 3.0
+            duration = 5.0
             carrier_freq = 1000
             mod_freq = 70
             freq_deviation = 100
@@ -358,15 +360,17 @@ if __name__ == "__main__":
             insig_fm = amplitude * np.sin(phase)
 
             OUT_fm = PsychoacousticAnnoyance_Di2016(insig_fm, fs, LoudnessField=0, time_skip=0.5, showPA=True, show=True)
+            print(OUT_fm['PAmean'].item())
 
         if type_wave == 3: # Noise Signal
             
             fs = 48000
-            duration = 3.0
+            duration = 5.0
             amplitude = 0.1
             insig_noise = amplitude * np.random.randn(int(fs * duration))
 
             OUT_noise = PsychoacousticAnnoyance_Di2016(insig_noise, fs, LoudnessField=0, time_skip=0.5, showPA=True, show=True)
+            print(OUT_noise['PAmean'].item())
 
         if type_wave == 4: # Short Signal
 
@@ -378,3 +382,4 @@ if __name__ == "__main__":
             insig_short = amplitude * np.sin(2 * np.pi * frequency * t)
 
             OUT_short = PsychoacousticAnnoyance_Di2016(insig_short, fs, LoudnessField=0, time_skip=0.5, showPA=True, show=True)
+            print(OUT_short['ScalarPA'])
