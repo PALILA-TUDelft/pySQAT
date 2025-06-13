@@ -183,14 +183,14 @@ Carrier Frequency (carrier_freq): 1 kHz
 
     Difference: -0.29 %
 
-> Percentiles (N = 10, S = 2.5, R = 0.8, FS = 0.5)
+> Percentiles (all 1)
 
     Mean Psychoacoustic Annoyance
     ------------------------------
-    MATLAB: 16.39 annoy
-    PYTHON: 16.39 annoy
+    MATLAB: 7.77 annoy
+    PYTHON: 7.77 annoy
 
-    Difference: -0 %
+    Difference: 0.0 %
 
 ************************************
 ** PsychoacousticAnnoyance_Di2016 **
@@ -246,11 +246,74 @@ Carrier Frequency (carrier_freq): 1 kHz
 
     Difference: -1.2 %
 
-> Percentiles (N = 10, S = 2.5, R = 0.8, FS = 0.5, K = 2.5)
+> Percentiles (all 1)
 
     Mean Psychoacoustic Annoyance
     ------------------------------
-    MATLAB: 58.8142 annoy
-    PYTHON: 58.8142 annoy
+    MATLAB: 3.18 annoy
+    PYTHON: 3.18 annoy
 
-    Difference: -0 %
+    Difference: 0.0 %
+
+**************************************
+** PsychoacousticAnnoyance_More2010 **
+**************************************
+
+Sampling Frequency (fs): 48 kHz
+Duration (d): 5 s
+Carrier Frequency (carrier_freq): 1 kHz
+
+[For all: free-field, skip 0.5]
+> Pure Sine (A = 0.1)
+
+    Mean Psychoacoustic Annoyance
+    ------------------------------
+    MATLAB: 16.65 annoy
+    PYTHON: 16.64 annoy
+
+    Difference: -0.024 %
+
+> AM (A = 0.1, fmod = 4 Hz, md = 1)
+
+    Mean Psychoacoustic Annoyance
+    ------------------------------
+    MATLAB: 9.73 annoy
+    PYTHON: 9.72 annoy
+
+    Difference: -0.14 %
+
+> FM (A = 0.1, fmod = 70 Hz, dev = 100 Hz, md = 1)
+
+    Mean Psychoacoustic Annoyance
+    ------------------------------
+    MATLAB: 18.28 annoy
+    PYTHON: 18.04 annoy
+
+    Difference: -1.3 %
+
+> Gaussian Noise (A = 0.1)
+
+    Mean Psychoacoustic Annoyance
+    ------------------------------
+    MATLAB: 54.42 annoy
+    PYTHON: 52.86 annoy
+
+    Difference: -2.9 %
+
+> Short Pure Sine (A = 0.1, d = 1.5 s)
+
+    Mean Psychoacoustic Annoyance
+    ------------------------------
+    MATLAB: 16.65 annoy
+    PYTHON: 16.64 annoy
+
+    Difference: -0.024 %
+
+> Percentiles (all 1)
+
+    Mean Psychoacoustic Annoyance
+    ------------------------------
+    MATLAB: 2.98 annoy
+    PYTHON: 2.98 annoy
+
+    Difference: 0.0 %
