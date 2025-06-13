@@ -15,497 +15,461 @@ import warnings, sys, os, inspect
 from sound_metrics import *
 from utilities import *
 from metrics_loudness import Loudness_ISO532_1
+from metrics_sharpness import Sharpness_DIN45692
+from metrics_roughness import Roughness_Daniel1997
+from metrics_fluctuation import FluctuationStrength_Osses2016
 
-__all__ = ["Sharpness_DIN45692"]
-FloatArray = NDArray[np.floating]
-
-def Sharpness_DIN45692(insig=None, fs=None, weight_type=None, LoudnessField=None, 
-                      LoudnessMethod=None, time_skip=None, show_sharpness=None, show_loudness=None, 
-                      dBFS=94, export_excel=None, SpecificLoudness=None, time=None):
+def PsychoacousticAnnoyance_Zwicker1999(insig=None, fs=None, LoudnessField=None, time_skip=None, showPA=None, show=None):
     """
-    Unified Sharpness calculation according to DIN45692 standard.
+    function OUT = PsychoacousticAnnoyance_Zwicker1999(insig,fs,LoudnessField,time_skip,showPA,show)
     
-    This function can operate in two modes:
-    1. From audio signal: Computes loudness first, then sharpness
-    2. From specific loudness: Directly computes sharpness from pre-computed specific loudness
+    This function calculates the Zwicker's psychoacoustic annoyance model from an input acoustic signal
     
-    Parameters:
-    -----------
-    insig : str or array-like, optional
-        Input signal (audio data) or filename
-    fs : float, optional
-        Sampling frequency (required if insig is audio data)
-    weight_type : str, optional
-        Weighting function type ('DIN45692', 'aures', 'bismarck')
-    LoudnessField : int, optional
-        Free field = 0; diffuse field = 1
-    LoudnessMethod : int, optional
-        Method for loudness calculation: stationary = 1; time varying = 2
-    time_skip : float, optional
-        Time to skip for statistics calculation
-    show_sharpness : bool, optional
-        Show sharpness plots
-    show_loudness : bool, optional
-        Show loudness results
-    dBFS : float, optional
-        dB Full Scale reference (default: 94)
-    export_excel : str, optional
-        Filename for Excel export
-    SpecificLoudness : np.ndarray, optional
-        Pre-computed specific loudness array
-    time : np.ndarray, optional
-        Time vector (required for time-varying specific loudness)
+    The psychoacoustic annoyance model is according to: (page 327) Zwicker, E. and Fastl, H. Second ed,
+    Psychoacoustics, Facts and Models, 2nd ed. M.R. Schroeder. Springer-Verlag, Berlin, 1999.
     
-    Returns:
-    --------
-    OUT : dict
-        Dictionary containing sharpness results and statistics
+    - This metric combines 4 psychoacoustic metrics to quantitatively describe annoyance:
+    
+       1) Loudness (sone) - calculated hereafter following ISO 532-1:2017
+          type <help Loudness_ISO532_1> for more info
+    
+       2) Sharpness (acum) - calculated hereafter following DIN 45692:2009
+          NOTE: uses DIN 45692 weighting function by default, please change code if
+          the use of a different withgitng function is desired).
+          type <help Sharpness_DIN45692_from_loudness>
+    
+       3) Roughness (asper) - calculated hereafter following Daniel & Weber model
+          type <help Roughness_Daniel1997> for more info
+    
+       4) Fluctuation strength (vacil) - calculated hereafter following Osses et al. model
+          type <help FluctuationStrength_Osses2016> for more info
+    
+    ##########################################################################
+    
+    INPUT:
+      insig : array
+      acoustic signal [1,nTimeSteps], monophonic (Pa)
+    
+      fs : integer
+      sampling frequency (Hz) - preferible 48 kHz or 44.1 kHz (default by the authors and takes less time to compute)
+    
+      time_skip : integer
+      skip start of the signal in <time_skip> seconds for statistics calculations
+    
+      LoudnessField : integer
+      chose field for loudness calculation; free field = 0; diffuse field = 1;
+      type <help Loudness_ISO532_1> for more info
+    
+      show : logical(boolean)
+      optional parameter, display results of loudness, sharpness, roughness and fluctuation strength
+      'false' (disable, default value) or 'true' (enable).
+    
+      showPA : logical(boolean)
+      optional parameter, display results of psychoacoustic annoyance
+      'false' (disable, default value) or 'true' (enable).
+    
+    OUTPUTS:
+      OUT: struct
+         * include results from the psychoacoustic annoyance
+                ** InstantaneousPA: instantaneous quantity (unity) vs time
+                ** ScalarPA : PA (scalar value) computed using the percentile values of each metric.
+                              NOTE: if the signal's length is smaller than 2s, this is the only output as no time-varying PA is calculated
+                ** time : time vector in seconds
+                ** wfr : fluctuation strength and roughness weighting function (not squared)
+                ** ws : sharpness and loudness weighting function (not squared)
+    
+                ** Statistics
+                  *** PAmean : mean value of psychoacoustic annoyance (unit)
+                  *** PAstd : standard deviation of instantaneous psychoacoustic annoyance (unit)
+                  *** PAmax : maximum of instantaneous psychoacoustic annoyance (unit)
+                  *** PAmin : minimum of instantaneous psychoacoustic annoyance (unit)
+                  *** PAx : value exceeded x percent of the time
+    
+         * include structs with the results from the other metrics computed
+           **  L : struct with Loudness results, type <help Loudness_ISO532_1> for more info
+           **  S : struct with Sharpness, type <help Sharpness_DIN45692_from_loudness>
+           **  R : strcut with roughness results, type <help Roughness_Daniel1997> for more info
+           ** FS : struct with fluctuation strength results, type <help FluctuationStrength_Osses2016> for more info
+    
+    
+     NOTE: 1) Input signals should be in pascal values or calibrated .wav files
+    
+           2) Fluctuation strength window has length of 2s. If the signal is less than 2s long, the FS calculation will be automatically
+              changed to stationary (i.e. uses a window with length equal to signal's size) . in this case, no time-varying PA is available.
+    
+           3) Be aware that, because of item 2), if the signal is more than 2s long, the last 2 seconds of the input signal are LOST !!!!
+    
+           4) is a best practice to compute percentile values following a time_skip (s) after the signal's beginning to avoid misleading results caused by possible transient effects caused by digital filtering
+    
+           5) because of item 2), the PA(t) outputs are also 2s smaller, but the percentile values are calculed inside each function before this cut
+    
+           6) Loudness and sharpness have the same time vector, but roughness and FS differ because of their window lengths of 200ms and 2s, respectively.
+              Therefore, in order to have the same time vector, after each respective metric calculation, the outputs are interpolated with respect to the loudness time vector and all cutted in the end
+              to the final time corresponding to the FS metric
+    
+    Author: Gil Felix Greco, Braunschweig 04.03.2020 (updated 14.03.2023)
+    Author: Gil Felix Greco, Braunschweig 16.02.2025 - introduced get_statistics function
+    ###########################################################################
     """
     
-    # Determine operation mode based on input
-    if SpecificLoudness is not None:
-        # Mode 2: From specific loudness
-        mode = 'from_loudness'
-    else:
-        # Mode 1: From audio signal
-        mode = 'from_signal'
+    if insig is None:
+        # Python equivalent of help function
+        print(PsychoacousticAnnoyance_Zwicker1999.__doc__)
+        return
     
-    # Handle mode 1: From audio signal
-    if mode == 'from_signal':
-        # --- WAV file interface ---
-        if isinstance(insig, str):
-            insig, fs = wav2sig(insig, fs, dBFS)
-
-        elif fs is None:
-            raise ValueError("If insig is not a filename, fs must be provided.")
-
-        # Default show_loudness and show_sharpness if not explicitly provided
-        # This logic mimics MATLAB's nargout behavior
-        # Using inspect.currentframe() to check if a return value is expected is a heuristic
-        # and might not be robust in all Python contexts. Explicitly passing True/False is preferred.
-        if show_loudness is None:
-            # Heuristic: if called without assignment, assume display is desired
-            if 'return' not in str(inspect.currentframe().f_back.f_code.co_names):
-                show_loudness = True
-            else:
-                show_loudness = False
-        
-        if show_sharpness is None:
-            if 'return' not in str(inspect.currentframe().f_back.f_code.co_names):
-                show_sharpness = True
-            else:
-                show_sharpness = False
-
-        if LoudnessMethod == 1:  # stationary loudness calculation
-            
-            L = Loudness_ISO532_1(insig, fs,          # input signal and sampling freq.
-                                 LoudnessField,       # free field = 0; diffuse field = 1;
-                                 LoudnessMethod,      # method used for loudness calculation: stationary (from input 1/3 octave unweighted SPL)=0; stationary = 1; time varying = 2;
-                                 time_skip,           # time_skip
-                                 show_loudness)       # show loudness results
-            
-            n = L['SpecificLoudness'].shape[1]
-            loudness_sones = np.zeros((L['SpecificLoudness'].shape[0], 1))  # pre allocate memory
-            SpecificLoudness = L['SpecificLoudness']
-            
-            for i in range(L['SpecificLoudness'].shape[0]):
-                loudness_sones[i] = np.sum(L['SpecificLoudness'][i, :]) * 0.10
-            
-        elif LoudnessMethod == 2:  # time-varying loudness calculation
-            
-            L = Loudness_ISO532_1(insig, fs,          # input signal and sampling freq.
-                                 LoudnessField,       # free field = 0; diffuse field = 1;
-                                 LoudnessMethod,      # method used for loudness calculation: stationary (from input 1/3 octave unweighted SPL)=0; stationary = 1; time varying = 2;
-                                 time_skip,           # time_skip
-                                 show_loudness)       # show loudness results
-            
-            n = L['InstantaneousSpecificLoudness'].shape[1]
-            loudness_sones = np.zeros((L['InstantaneousSpecificLoudness'].shape[0], 1))  # pre allocate memory
-            SpecificLoudness = L['InstantaneousSpecificLoudness']
-            
-            for i in range(L['InstantaneousSpecificLoudness'].shape[0]):
-                loudness_sones[i] = np.sum(L['InstantaneousSpecificLoudness'][i, :]) * 0.10
-
-        z = np.linspace(0.1, 24, n)  # create bark axis
-        
+    # Handle default arguments
+    if show is None:
+        show = 1 if showPA is None else 0
+    
+    if showPA is None:
+        showPA = 1 if show is None else 0
+    
+    time_insig = np.arange(0, len(insig)) / fs  # time vector of the audio input, in seconds
+    
+    if time_insig[-1] < 2:
+        print('\nWARNING: the signal\'s length is smaller than 2 seconds.\nDue to the minimum window size used for the fluctuation strength, the computation of a time-varying psychoacoustic annoyance is not possible !!!\nOnly scalar psychoacoustic annoyance number will be calculated for this signal!\n')
+        method_FS = 0  # stationary method used for the fluctuation strength
     else:
-        # Mode 2: From specific loudness
-        if show_sharpness is None:
-            show_sharpness = False # Default to False when SpecificLoudness is provided
-        
-        n = SpecificLoudness.shape[1]
-        z = np.linspace(0.1, 24, n)  # create bark axis
+        method_FS = 1  # time-varying method used for the fluctuation strength
+    
+    ## Loudness (according to ISO 531-1:2017)
+    
+    L = Loudness_ISO532_1(insig, fs,         # input signal and sampling freq.
+                         LoudnessField,      # field; free field = 0; diffuse field = 1;
+                         2,                  # method; stationary (from input 1/3 octave unweighted SPL)=0; stationary = 1; time varying = 2; 
+                         time_skip,          # time_skip, in seconds for level (stationary signals) and statistics (stationary and time-varying signals) calculations
+                         0)                  # show results, 'false' (disable, default value) or 'true' (enable)
+    
+    OUT = {}
+    OUT['L'] = L  # output loudness results
+    
+    ## Sharpness (according to DIN 45692) from loudness input 
 
-        if SpecificLoudness.shape[0] == 1:  # define method based on the size of the input specific loudness
-            method = 0  # (stationary) - Specific loudness [1,sone/Bark]
+    S = Sharpness_DIN45692(SpecificLoudness=L['InstantaneousSpecificLoudness'],  # input (time-varying) specific loudness
+                           weight_type='DIN45692',                           # type of weighting function used for sharpness calculation
+                           time=L['time'],                            # time vector of the loudness calculation
+                           time_skip=time_skip,                            # time_skip (second) for statistics calculation
+                           show_sharpness=False)                                    # show sharpness results; true or false
+    
+    OUT['S'] = S  # output sharpness results
+    
+    ## Roughness (according to Daniel & Weber model)
+    
+    R = Roughness_Daniel1997(insig, fs,      # input signal and sampling freq.
+                            time_skip,       # time_skip, in seconds for statistical calculations
+                            0)               # show results, 'false' (disable, default value) or 'true' (enable)  
+    
+    OUT['R'] = R  # output roughness results
+    
+    ## Fluctuation strength (according to Osses et al. model)
+    
+    # the output signal will be 2s smaller due to the windown length
+    FS = FluctuationStrength_Osses2016(insig, fs,     # input signal and sampling freq.
+                                      method_FS,       # method, stationary analysis =0 - window size=length(insig), time_varying analysis - window size=2s
+                                      time_skip,       # time_skip, in seconds for statistical calculations
+                                      0)               # show results, 'false' (disable, default value) or 'true' (enable)  
+    
+    OUT['FS'] = FS  # output fluctuation strength results
+    
+    ## for signal with length smaller than 2 s, only scalar psychoacoustic annoyance can be computed
+    
+    if time_insig[-1] < 2:
+        
+        ## (scalar) psychoacoustic annoyance - computed directly from percentile values
+        
+        # sharpness and loudness influence
+        if S['S5'] > 1.75:
+            ws = (S['S5']-1.75)*(np.log10(L['N5']+10))/4  # in the Fastl&zwicker book, ln is used but it is not clear if it is natural log or log10, but most of subsequent literature uses log10
         else:
-            method = 1  # (time-varying) - Instantaneous specific loudness [nTimeSteps,sone/Bark]
-
-        loudness_sones = np.zeros((SpecificLoudness.shape[0], 1))  # pre allocate memory
-
-        for i in range(SpecificLoudness.shape[0]):
-            loudness_sones[i] = np.sum(SpecificLoudness[i, :]) * 0.10
-
-    ## Sharpness calculation ##########################################################
-
-    if weight_type == 'DIN45692':   # Widmann model
+            ws = 0
+            
+        # Handle inf and NaN values
+        if np.isinf(ws) or np.isnan(ws):
+            ws = 0  # replace inf and NaN with zeros
         
-        g = il_sharpWeights(z, 'standard', [])  # calculate sharpness weighting factors
-        k = 0.11  # adjusted to yield 1 acum using SQAT - DIN45692 allows 0.105<=k<=0.0115 for this weighting function
+        # influence of roughness and fluctuation strength
+        wfr = (2.18/(L['N5']**0.4))*(0.4*FS['FS5'] + 0.6*R['R5'])
         
-        s = np.zeros(SpecificLoudness.shape[0])
-        for i in range(SpecificLoudness.shape[0]):
-            # Fix: Use .item() to get scalar from 1-element array
-            s[i] = k * np.sum(SpecificLoudness[i, :] * g * z * 0.10) / loudness_sones[i].item()
+        # Handle inf and NaN values
+        if np.isinf(wfr) or np.isnan(wfr):
+            wfr = 0  # replace inf and NaN with zeros
         
-        ###############################################################################
-    elif weight_type == 'aures':  # Aures model
+        # psychoacoustic annoyance
+        PA_scalar = L['N5']*(1 + np.sqrt(ws**2 + wfr**2))
         
-        s = np.zeros(SpecificLoudness.shape[0])
-        g_sharpness_weights = np.zeros((SpecificLoudness.shape[0], len(z))) # This 'g' is for Sharpness_DIN45692 scope
-        for i in range(SpecificLoudness.shape[0]):
-            # il_sharpWeights returns a 1D array for a single loudness value
-            g_sharpness_weights[i, :] = il_sharpWeights(z, 'aures', loudness_sones[i].item())  # calculate sharpness weighting factor
-            # Fix: Use .item() to get scalar from 1-element array
-            s[i] = 0.11 * np.sum(SpecificLoudness[i, :] * g_sharpness_weights[i, :] * z * 0.10) / loudness_sones[i].item()
+        ## ##################################################################
+        #   output struct for time-varying signals
+        #####################################################################
         
-        ###############################################################################
-    elif weight_type == 'bismarck':  # von Bismarck
-        g = il_sharpWeights(z, 'bismarck', [])  # calculate sharpness weighting factor
+        # main output results
+        OUT['ScalarPA'] = PA_scalar               # Annoyance calculated from the percentiles of each variable
         
-        s = np.zeros(SpecificLoudness.shape[0])
-        for i in range(SpecificLoudness.shape[0]):
-            # Fix: Use .item() to get scalar from 1-element array
-            s[i] = 0.11 * np.sum(SpecificLoudness[i, :] * g * z * 0.10) / loudness_sones[i].item()
-
-    ###############################################################################
-    # Output struct for time-varying signals
-
-    # Determine if we're dealing with time-varying or stationary analysis
-    if mode == 'from_signal':
-        is_time_varying = (LoudnessMethod == 2)
-        time_vector = L['time'] if LoudnessMethod == 2 else None
-    else:
-        is_time_varying = (method == 1)
-        time_vector = time
-
-    if is_time_varying:  # (time-varying sharpness)
+    else:  # for signals larger than 2 seconds
         
-        OUT = {}
-        OUT['InstantaneousSharpness'] = s  # instantaneous sharpness
-        OUT['time'] = time_vector            # time vector
+        ## interpolation due to different output lengths of the different metrics
         
-        if mode == 'from_signal':
-            OUT['loudness'] = L                # output struct from the loudness calculation
-           
-        # get statistics from Time-varying sharpness (acum)
-        #############################################
-
-        # Set default time_skip if not provided
-        if time_skip is None:
-            time_skip = 0
-
+        ############################################################################################################
+        # step 1) find idx related to the last time step of output from the fluctuation strength function (shorter output signal)
+        # step 2) cut instaneous quantities from 1st idx to index related to the last time step of fluctuation strength
+        ############################################################################################################
+        
+        LastTime = FS['time'][-1]          # take last time of the fluctuation strength
+        
+        # loudness
+        idx_L = np.argmin(np.abs(L['time'] - LastTime))  # step 1) find idx
+        
+        L['time'] = L['time'][:idx_L+1]  # step 2) cut signal's end according to idx from step 1)
+        L['InstantaneousLoudness'] = L['InstantaneousLoudness'][:idx_L+1]  # step 2)
+        
+        # sharpness
+        idx_S = idx_L    # indice is the same as the loudness
+        
+        S['time'] = S['time'][:idx_S+1]  # step 2)
+        S['InstantaneousSharpness'] = S['InstantaneousSharpness'][:idx_S+1]  # step 2)
+        
+        # roughness
+        idx_R = np.argmin(np.abs(R['time'] - LastTime))  # step 1) find idx
+        
+        R['time'] = R['time'][:idx_R+1]  # step 2)
+        R['InstantaneousRoughness'] = R['InstantaneousRoughness'][:idx_R+1]  # step 2)
+        
+        R['time'] = R['time'].T  # step 2)
+        R['InstantaneousRoughness'] = R['InstantaneousRoughness'].T  # step 2)
+        
+        ############################################################################
+        
+        roughness = np.interp(L['time'], R['time'], R['InstantaneousRoughness'])  # interpolation to have the same time vector as loudness metric
+        
+        fluctuation = np.interp(L['time'], FS['time'], FS['InstantaneousFluctuationStrength'])  # interpolation to have the same time vector as loudness metric
+        
+        ## Time-varying psychoacoustic annoyance
+        
+        # declaring variables for pre allocating memory
+        PA = np.zeros(len(L['time']))
+        ws = np.zeros(len(L['time']))
+        wfr = np.zeros(len(L['time']))
+        
+        for i in range(len(L['time'])):
+            
+            # sharpness influence
+            if S['InstantaneousSharpness'][i] > 1.75:
+                ws[i] = (S['InstantaneousSharpness'][i]-1.75)*(np.log10(L['InstantaneousLoudness'][i]+10))/4  # in the Fastl&zwicker book, ln is used but it is not clear if it is natural log or log10, but most of subsequent literature uses log10
+            else:
+                ws[i] = 0
+            
+            # Handle inf and NaN values
+            ws[np.isinf(ws) | np.isnan(ws)] = 0  # replace inf and NaN with zeros
+            
+            # influence of roughness and fluctuation strength
+            wfr[i] = (2.18/(L['InstantaneousLoudness'][i]**0.4))*(0.4*fluctuation[i]+0.6*roughness[i])
+            
+            # Handle inf and NaN values
+            wfr[np.isinf(wfr) | np.isnan(wfr)] = 0  # replace inf and NaN with zeros
+            
+            # psychoacoustic annoyance
+            PA[i] = L['InstantaneousLoudness'][i]*(1 + np.sqrt(ws[i]**2 + wfr[i]**2))
+        
+        OUT['wfr'] = wfr     # OUTPUT: fluctuation strength and sharpness weighting function (not squared)
+        OUT['ws'] = ws       # OUTPUT: sharpness and loudness weighting function (not squared)
+        
+        ## (scalar) psychoacoustic annoyance - computed directly from percentile values
+        
+        # sharpness influence
+        if S['S5'] > 1.75:
+            ws_scalar = (S['S5']-1.75)*(np.log10(L['N5']+10))/4  # in the Fastl&zwicker book, ln is used but it is not clear if it is natural log or log10, but most of subsequent literature uses log10
+        else:
+            ws_scalar = 0
+        
+        # Handle inf and NaN values
+        if np.isinf(ws_scalar) or np.isnan(ws_scalar):
+            ws_scalar = 0  # replace inf and NaN with zeros
+        
+        # influence of roughness and fluctuation strength
+        wfr_scalar = (2.18/(L['N5']**0.4))*(0.4*FS['FS5'] + 0.6*R['R5'])
+        
+        # Handle inf and NaN values
+        if np.isinf(wfr_scalar) or np.isnan(wfr_scalar):
+            wfr_scalar = 0  # replace inf and NaN with zeros
+        
+        # psychoacoustic annoyance
+        PA_scalar = L['N5']*(1 + np.sqrt(ws_scalar**2 + wfr_scalar**2))
+        
+        ## ##################################################################
+        #   output struct for time-varying signals
+        #####################################################################
+        
+        # main output results
+        OUT['InstantaneousPA'] = PA               # instantaneous Annoyance
+        OUT['ScalarPA'] = PA_scalar               # Annoyance calculated from the percentiles of each variable
+        OUT['time'] = L['time']                   # time vector
+        
+        #######################################################################
+        # get statistics from Time-varying PA
+        #####################################################################
+        
         idx = np.argmin(np.abs(OUT['time'] - time_skip))  # find idx of time_skip on time vector
-
-        metric_statistics = 'Sharpness_DIN45692'
-        OUT_statistics = get_statistics(s[idx:], metric_statistics)  # get statistics
-
+        
+        metric_statistics = 'PsychoacousticAnnoyance_Zwicker1999'
+        OUT_statistics = get_statistics(PA[idx:], metric_statistics)  # get statistics
+        
         # copy fields of <OUT_statistics> struct into the <OUT> struct
-        fields_OUT_statistics = list(OUT_statistics.keys())  # Get all field names in OUT_statistics
-
-        for i in range(len(fields_OUT_statistics)):
-            fieldName = fields_OUT_statistics[i]
+        for fieldName in OUT_statistics.keys():  # Get all field names in OUT_statistics
             if fieldName not in OUT:  # Only copy if OUT does NOT already have this field
                 OUT[fieldName] = OUT_statistics[fieldName]
         
-        # del OUT_statistics, metric_statistics, fields_OUT_statistics, fieldName # Keep for debugging if needed
-        #############################################
+        #####################################################
+        
+        ## plot
+        
+        if show == True or showPA == True:
+            num_plots = 0
+            if show:
+                num_plots += 5 # L, S, R, FS, K
+            if showPA:
+                num_plots += 1 # PA
 
-          
-        #############################################
-        # Show plots (time-varying)
-        #############################################
-        
-        if show_sharpness == True:
-            
-            plt.figure()
-            plt.gcf().canvas.manager.set_window_title('Sharpness analysis (time-varying)')
-            
-            # Ensure S5 is treated correctly whether it's a scalar or array
-            s5_val = OUT['S5'][0] if isinstance(OUT['S5'], np.ndarray) else OUT['S5']
-            plt.plot(OUT['time'], s5_val * np.ones(len(OUT['time'])), 'r--', label=f'$S_5$={s5_val:.3g}')
-            plt.plot(OUT['time'], s)
-            
-            plt.xlabel('Time, $t$ (s)')
-            plt.ylabel('Sharpness, $S$ (acum)')
-            plt.xlim([0, OUT['time'][-1]])
-            
-            plt.legend(loc='best')
-            plt.legend().set_frame_on(False)
-            
-            plt.gcf().patch.set_facecolor('white')
-            plt.show()
-        
-    else:  # (stationary sharpness)
-        
-        OUT = {}
-        if mode == 'from_signal':
-            OUT['Sharpness'] = s  # sharpness (will be a 1-element array)
-        else:
-            OUT['Sharpness'] = s[0]  # sharpness (scalar from 1-element array)
-    
-    if export_excel is not None:
-        export_dict_to_excel(OUT, filename=f"{export_excel}")
+            if num_plots > 0:
+                # Determine grid size (e.g., 2 columns, calculate rows)
+                cols = 2
+                rows = int(np.ceil(num_plots / cols))
+                
+                fig, axes = plt.subplots(rows, cols, figsize=(12, 4 * rows)) # Adjust figsize as needed
+                axes = axes.flatten() # Flatten the axes array for easy iteration
+
+                plot_idx = 0
+                if show == True:
+                    il_plotter(OUT['time'], L['InstantaneousLoudness'], L['N5'], 'loudness', ax=axes[plot_idx])
+                    plot_idx += 1
+                    il_plotter(OUT['time'], S['InstantaneousSharpness'], S['S5'], 'sharpness', ax=axes[plot_idx])
+                    plot_idx += 1
+                    il_plotter(OUT['time'], roughness, R['R5'], 'roughness', ax=axes[plot_idx])
+                    plot_idx += 1
+                    il_plotter(OUT['time'], fluctuation, FS['FS5'], 'fluctuation', ax=axes[plot_idx])
+                    plot_idx += 1
+                
+                if showPA == True:
+                    il_plotter(OUT['time'], OUT['InstantaneousPA'], OUT['PA5'], 'annoyance', ax=axes[plot_idx])
+                    plot_idx += 1
+
+                # Turn off any unused subplots if the grid has more axes than plots
+                for i in range(plot_idx, len(axes)):
+                    fig.delaxes(axes[i]) # Remove empty subplots
+
+                plt.tight_layout() # Adjust layout to make space for suptitle
+                plt.show()
 
     return OUT
+
+def il_plotter(time, Instantaneous, percentile, variable, ax): # Added 'ax' argument
+    x_axis = 'Time, $t$ (s)'
+
+    # Define plot properties using a dictionary for cleaner access
+    plot_props = {
+        'loudness': {'p': '$N', 'y_axis': 'Loudness, $N$ (sone)', 'title': 'Loudness'},
+        'sharpness': {'p': '$S', 'y_axis': 'Sharpness, $S$ (acum)', 'title': 'Sharpness'},
+        'roughness': {'p': '$R', 'y_axis': 'Roughness, $R$ (asper)', 'title': 'Roughness'},
+        'fluctuation': {'p': 'FS$', 'y_axis': 'Fluctuation strength, $F$ (vacil)', 'title': 'Fluctuation strength'},
+        'annoyance': {'p': 'PA$', 'y_axis': 'Psychoacoustic annoyance, PA (-)', 'title': 'Psychoacoustic annoyance'},
+    }
+
+    props = plot_props.get(variable, {'p': '', 'y_axis': '', 'title': variable.capitalize()})
+
+    # Ensure percentile is a scalar if it's a numpy array with one element
+    if isinstance(percentile, np.ndarray):
+        if percentile.size == 1:
+            percentile_scalar = percentile.item()
+        else:
+            warnings.warn(f"Percentile for {variable} is an array with multiple elements. Using the first element.")
+            percentile_scalar = percentile[0]
+    else:
+        percentile_scalar = percentile
+
+    # Plotting on the provided axes object 'ax'
+    ax.plot(time, Instantaneous, 'k', linewidth=0.5, label='_nolegend_')
     
-def il_sharpWeights(z, type, N):
-    """
-    Calculate sharpness weighting factors according to different models.
-    
-    Parameters:
-    -----------
-    z : array-like
-        Bark frequency scale
-    type : str
-        Type of weighting ('standard', 'bismarck', 'aures')
-    N : scalar, list, or None
-        Loudness values. For 'aures' type:
-        - If scalar (or 1-element array/list): Calculates 1D weighting factors.
-        - If multi-element list/array: Calculates 2D weighting factors (time-varying).
-    
-    Returns:
-    --------
-    g : np.ndarray
-        Weighting factors (1D or 2D depending on 'type' and 'N' for 'aures').
-    """
+    # Plotting the percentile line
+    ax.plot(time, percentile_scalar * np.ones(len(time)), 'r--', linewidth=0.5,
+            label=f'{props["p"]}_5={percentile_scalar:.2f}$')
 
-    # Initial g is 1D, but might be reassigned to 2D later for 'aures'
-    g = np.zeros(len(z)) 
+    # Set legend, labels, grid, and background color for the specific subplot
+    ax.legend(loc='upper right', fancybox=False, framealpha=1, edgecolor='black')
+    ax.set_ylabel(props['y_axis'])
+    ax.set_xlabel(x_axis)
+    ax.set_xlim([time[0], time[-1]])
+    ax.set_title(props['title']) # Set title for the individual subplot
+    ax.grid(False)
+    ax.set_facecolor('white')
 
-    if type == 'standard':  # Widmann model according to DIN 45692 (2009)
-        g[z < 15.8] = 1
-        mask = z >= 15.8
-        g[mask] = 0.15 * np.exp(0.42 * (z[mask] - 15.8)) + 0.85
-
-    elif type == 'bismarck':  # von bismark's model according to DIN 45692 (2009)
-        g[z < 15] = 1
-        mask = z >= 15
-        g[mask] = 0.2 * np.exp(0.308 * (z[mask] - 15)) + 0.8
-
-    elif type == 'aures':    # Aure's model according to DIN 45692 (2009)
-        # Normalize N to a list of scalar values for consistent iteration
-        N_vals = []
-        if np.isscalar(N) or N is None:
-            N_vals = [N] if N is not None else [0] # Treat None as 0 loudness
-        elif isinstance(N, np.ndarray):
-            if N.ndim == 0: # 0-dim array (scalar)
-                N_vals = [N.item()]
-            elif N.ndim == 1 and N.shape[0] == 1: # 1-element 1D array
-                N_vals = [N.item()]
-            else: # Multi-element 1D array (time-varying)
-                N_vals = N.tolist() # Convert to list of scalars
-        elif isinstance(N, list):
-            N_vals = N
-        else: # Fallback for unexpected N types
-            N_vals = [0] # Default to 0 loudness
-
-        # Determine if the output 'g' should be 1D or 2D based on N_vals length
-        if len(N_vals) > 1: # Time-varying loudness, g_output should be 2D
-            g_output = np.zeros((len(N_vals), len(z)))
-            for nt_idx, N_val in enumerate(N_vals):
-                # Avoid division by zero or log of non-positive values
-                if N_val is not None and N_val > 0:
-                    log_term = np.log(0.05 * N_val + 1)
-                    if log_term > 0:
-                        g_output[nt_idx, :] = 0.078 * (np.exp(0.171 * z) / z) * (N_val / log_term)
-                    else:
-                        g_output[nt_idx, :] = 0 # Handle log_term <= 0
-                else:
-                    g_output[nt_idx, :] = 0 # Handle N_val <= 0 or None
-            g = g_output # Reassign g to the 2D output
-        else: # Stationary loudness (N_vals has one element), g remains 1D
-            N_val = N_vals[0] if N_vals else 0 # Get the single value, default to 0 if list is empty
-            if N_val is not None and N_val > 0:
-                log_term = np.log(0.05 * N_val + 1)
-                if log_term > 0:
-                    g = 0.078 * (np.exp(0.171 * z) / z) * (N_val / log_term)
-                else:
-                    g = np.zeros_like(z)
-            else:
-                g = np.zeros_like(z)
-    return g
-
-check_which = 2
+check_which = 1  # 0 = no test, 1 = PsychoacousticAnnoyance_Zwicker1999
 
 if __name__ == "__main__":
     if check_which == 0: # NO TEST
-
-        print("metrics_sharpness.py")
+        print("metrics_annoyance.py")
     
-    elif check_which == 1: # Sharpness_DIN45692 (regular / wavfile)
-        with_wavfile = 0
+    elif check_which == 1: # PsychoacousticAnnoyance_Zwicker1999
+        with_wavfile = 0 # 0 = no wavfile, 1 = wavfile
+        type_wave = 4 # 0 = pure, 1 = AM, 2 = FM, 3 = noise, 4 = short
 
-        """
-        Validation clip for Sharpness_DIN45692
-        -----------------------------------
+        if type_wave == 0: # Pure Sine Wave
+            fs = 48000
+            duration = 5.0
+            frequency = 1000
+            amplitude = 0.1
+            t = np.arange(0, duration, 1/fs)
+            insig_sine = amplitude * np.sin(2 * np.pi * frequency * t)
 
-        Generates a narrowband, 1 kHz sinusoid with 160 Hz bandwidth at 60 dB SPL, sampled at 48 kHz.
-        """
+            OUT_sine = PsychoacousticAnnoyance_Zwicker1999(insig_sine, fs, LoudnessField=0, time_skip=0.5, showPA=True, show=True)
+            print(OUT_sine['PAmean'].item())
 
-        print("Running Sharpness_DIN45692 test (from WAV/signal)...")
+        if type_wave == 1: # Amplitude Modulated Sine Wave
+            fs = 48000
+            duration = 5.0
+            carrier_freq = 1000
+            mod_freq = 4
+            amplitude = 0.1
+            mod_depth = 1.0
+            t = np.arange(0, duration, 1/fs)
 
+            carrier = np.sin(2 * np.pi * carrier_freq * t)
+            modulator = 0.5 * (1 + mod_depth * np.sin(2 * np.pi * mod_freq * t))
+            insig_am = amplitude * modulator * carrier
 
-        # Define parameters for the narrowband noise
-        fs = 48_000
-        fc = 1_000.0  # Center frequency = 1 kHz
-        bw = 160      # Bandwidth = 160 Hz
-        Lp_dB = 60    # Sound Pressure Level = 60 dB SPL
-        duration = 2  # Duration = 2 seconds
+            OUT_am = PsychoacousticAnnoyance_Zwicker1999(insig_am, fs, LoudnessField=0, time_skip=0.5, showPA=True, show=True)
+            print(OUT_am['PAmean'].item())
 
-        num_samples = int(fs * duration)
-        white_noise = np.random.randn(num_samples)
+        if type_wave == 2: # Frequency Modulated Sine Wave # TODO: Check as looks like some metrics are off.
+            fs = 48000
+            duration = 5.0
+            carrier_freq = 1000
+            mod_freq = 70
+            freq_deviation = 100
+            amplitude = 0.1
+            t = np.arange(0, duration, 1/fs)
 
-        # Design a Butterworth bandpass filter
-        lowcut = fc - bw / 2
-        highcut = fc + bw / 2
-        nyquist = 0.5 * fs
-        low = lowcut / nyquist
-        high = highcut / nyquist
-        
-        # Using a 4th order Butterworth filter for good rolloff
-        b, a = butter(4, [low, high], btype='band')
+            phase = 2 * np.pi * carrier_freq * t + (freq_deviation / mod_freq) * np.cos(2 * np.pi * mod_freq * t)
+            insig_fm = amplitude * np.sin(phase)
 
-        # Apply the filter
-        narrowband_noise = lfilter(b, a, white_noise)
+            OUT_fm = PsychoacousticAnnoyance_Zwicker1999(insig_fm, fs, LoudnessField=0, time_skip=0.5, showPA=True, show=True)
+            print(OUT_fm['PAmean'].item())
 
-        # Calibrate to desired SPL
-        P_ref = 20e-6  # Reference sound pressure in Pascals for 0 dB SPL
-        P_rms_target = P_ref * (10**(Lp_dB / 20))
-        current_rms = np.sqrt(np.mean(narrowband_noise**2))
+        if type_wave == 3: # Noise Signal
+            
+            fs = 48000
+            duration = 5.0
+            amplitude = 0.1
+            insig_noise = amplitude * np.random.randn(int(fs * duration))
 
-        if current_rms > 0:
-            calibrated_noise = narrowband_noise * (P_rms_target / current_rms)
-        else:
-            calibrated_noise = np.zeros_like(narrowband_noise) # Handle case where noise is zero
+            OUT_noise = PsychoacousticAnnoyance_Zwicker1999(insig_noise, fs, LoudnessField=0, time_skip=0.5, showPA=True, show=True)
+            print(OUT_noise['PAmean'].item())
 
-        insig = calibrated_noise
-        insig = insig.astype(np.float32) # Ensure float32 as in your example
+        if type_wave == 4: # Short Signal
 
-        if with_wavfile == 1:
-            wavfile.write("test_S1a.wav", fs, insig)
-            OUT = Sharpness_DIN45692(
-                insig="test_S1a.wav",
-                fs=fs,
-                weight_type='DIN45692', # Example: 'DIN45692', 'bismarck', or 'aures'
-                LoudnessField=0,        # 0 for free field, 1 for diffuse field
-                LoudnessMethod=2,       # 1 for stationary, 2 for time-varying
-                time_skip=0.5,          # Skip first 0.5 seconds for statistics (if LoudnessMethod=2)
-                show_sharpness=True,    # Display sharpness results
-                show_loudness=False     # Display loudness results
-            )
-            os.remove("test_S1a.wav") if os.path.exists("test_S1a.wav") else None
-        else:
-            OUT = Sharpness_DIN45692(
-                insig=insig,
-                fs=fs,
-                weight_type='DIN45692', # Example: 'DIN45692', 'bismarck', or 'aures'
-                LoudnessField=0,        # 0 for free field, 1 for diffuse field
-                LoudnessMethod=2,       # 1 for stationary, 2 for time-varying
-                time_skip=0.5,          # Skip first 0.5 seconds for statistics (if LoudnessMethod=2)
-                show_sharpness=True,    # Display sharpness results
-                show_loudness=False     # Display loudness results
-            )
+            fs = 48000
+            duration = 1.5
+            frequency = 1000
+            amplitude = 0.1
+            t = np.arange(0, duration, 1/fs)
+            insig_short = amplitude * np.sin(2 * np.pi * frequency * t)
 
-        print("\nSharpness Calculation Results (OUT):")
-        if 'InstantaneousSharpness' in OUT:
-            print(f"  Instantaneous Sharpness (first 5 values): {OUT['InstantaneousSharpness'][:5]}")
-            print(f"  Mean Sharpness (Smean): {OUT['Smean'][0]:.3f} acum")
-            print(f"  S5 Sharpness: {OUT['S5'][0]:.3f} acum")
-        elif 'Sharpness' in OUT:
-            # For stationary, s is a 1-element array, so [0] is needed
-            print(f"  Stationary Sharpness: {OUT['Sharpness'][0]:.3f} acum")
-        else:
-            print("  No sharpness output found (check LoudnessMethod).")
-
-    elif check_which == 2: # Sharpness_DIN45692 (loudness)
-
-        """
-        Validation clip for Sharpness_DIN45692 (loudness)
-        -----------------------------------
-        Tests the function when SpecificLoudness and time are provided directly.
-        """
-        print("Running Sharpness_DIN45692 test (from SpecificLoudness)...")
-
-        # --- Test Case 1: Stationary Specific Loudness ---
-        print("\n--- Test Case 1: Stationary Sharpness ---")
-        # Simulate SpecificLoudness for a stationary signal (1 time step, 24 bark bands)
-        # Values are arbitrary for testing, but should be positive
-        stationary_specific_loudness = np.array([[
-            0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 
-            1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0, 
-            2.1, 2.2, 2.3, 2.4
-        ]]) # Shape (1, 24)
-
-        out_stationary = Sharpness_DIN45692(
-            SpecificLoudness=stationary_specific_loudness,
-            weight_type='DIN45692', # Test with DIN45692
-            show_sharpness=False # No plot for stationary
-        )
-        print("Stationary Sharpness Results (OUT):")
-        if 'Sharpness' in out_stationary:
-            print(f"  Calculated Stationary Sharpness: {out_stationary['Sharpness']:.3f} acum")
-        else:
-            print("  Error: Stationary sharpness not found in output.")
-
-        # --- Test Case 2: Time-Varying Specific Loudness ---
-        print("\n--- Test Case 2: Time-Varying Sharpness ---")
-        # Simulate SpecificLoudness for a time-varying signal
-        num_time_steps = 50
-        num_bark_bands = 24
-        time_duration = 5.0 # seconds
-        time_vector = np.linspace(0, time_duration, num_time_steps)
-
-        # Create a specific loudness that changes over time
-        # For example, increasing loudness then decreasing
-        time_varying_specific_loudness = np.zeros((num_time_steps, num_bark_bands))
-        for i in range(num_time_steps):
-            # Simulate a peak around the middle of the time series
-            factor = 1 + np.sin(time_vector[i] / time_duration * 2 * np.pi) * 0.5
-            time_varying_specific_loudness[i, :] = (np.random.rand(num_bark_bands) * 0.5 + 0.1) * factor
-        
-        # Ensure no zero or negative values for robustness, especially for 'aures'
-        time_varying_specific_loudness[time_varying_specific_loudness <= 0] = 0.01
-
-        out_time_varying = Sharpness_DIN45692(
-            SpecificLoudness=time_varying_specific_loudness,
-            weight_type='aures', # Test with Aures model for time-varying
-            time=time_vector,
-            time_skip=1.0, # Skip first 1 second for statistics
-            show_sharpness=True # Show plot for time-varying
-        )
-
-        print("Time-Varying Sharpness Results (OUT):")
-        if 'InstantaneousSharpness' in out_time_varying:
-            print(f"  Instantaneous Sharpness (first 5 values): {out_time_varying['InstantaneousSharpness'][:5]}")
-            print(f"  Mean Sharpness (Smean): {out_time_varying['Smean'][0]:.3f} acum")
-            print(f"  S5 Sharpness: {out_time_varying['S5'][0]:.3f} acum")
-            print(f"  Time vector length: {len(out_time_varying['time'])}")
-        else:
-            print("  Error: Time-varying sharpness not found in output.")
-
-        # --- Test Case 3: Time-Varying Specific Loudness with Bismarck ---
-        print("\n--- Test Case 3: Time-Varying Sharpness (Bismarck) ---")
-        out_time_varying_bismarck = Sharpness_DIN45692(
-            SpecificLoudness=time_varying_specific_loudness,
-            weight_type='bismarck', # Test with Bismarck model
-            time=time_vector,
-            time_skip=1.0,
-            show_sharpness=False # Don't show plot again
-        )
-        print("Time-Varying Sharpness Results (Bismarck) (OUT):")
-        if 'InstantaneousSharpness' in out_time_varying_bismarck:
-            print(f"  Instantaneous Sharpness (first 5 values): {out_time_varying_bismarck['InstantaneousSharpness'][:5]}")
-            print(f"  Mean Sharpness (Smean): {out_time_varying_bismarck['Smean'][0]:.3f} acum")
-        else:
-            print("  Error: Time-varying sharpness (Bismarck) not found in output.")
+            OUT_short = PsychoacousticAnnoyance_Zwicker1999(insig_short, fs, LoudnessField=0, time_skip=0.5, showPA=True, show=True)
+            print(OUT_short['ScalarPA'].item())

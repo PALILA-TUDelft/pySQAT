@@ -174,15 +174,6 @@ Carrier Frequency (carrier_freq): 1 kHz
 
     Difference: -1.0 %
 
-> Gaussian Noise (A = 0.1)
-
-    Mean Psychoacoustic Annoyance
-    ------------------------------
-    MATLAB: 34.25 annoy
-    PYTHON: 33.90 annoy
-
-    Difference: -1.0 %
-
 > Short Pure Sine (A = 0.1, d = 1.5 s)
 
     Mean Psychoacoustic Annoyance
@@ -191,3 +182,57 @@ Carrier Frequency (carrier_freq): 1 kHz
     PYTHON: 26.30 annoy
 
     Difference: -1.2 %
+
+*****************************************
+** PsychoacousticAnnoyance_Zwicker1999 **
+*****************************************
+
+Sampling Frequency (fs): 48 kHz
+Duration (d): 5 s
+Carrier Frequency (carrier_freq): 1 kHz
+
+[For all: free-field, skip 0.5]
+> Pure Sine (A = 0.1)
+
+    Mean Psychoacoustic Annoyance
+    ------------------------------
+    MATLAB: 8.64 annoy
+    PYTHON: 8.63 annoy
+
+    Difference: -0.26 %
+
+> AM (A = 0.1, fmod = 4 Hz, md = 1)
+
+    Mean Psychoacoustic Annoyance
+    ------------------------------
+    MATLAB: 8.08 annoy
+    PYTHON: 8.11 annoy
+
+    Difference: +0.33 %
+
+> FM (A = 0.1, fmod = 70 Hz, dev = 100 Hz, md = 1)
+
+    Mean Psychoacoustic Annoyance
+    ------------------------------
+    MATLAB: 16.33 annoy
+    PYTHON: 13.18 annoy
+
+    Difference: -19 %
+
+> Gaussian Noise (A = 0.1)
+
+    Mean Psychoacoustic Annoyance
+    ------------------------------
+    MATLAB: 34.28 annoy
+    PYTHON: 33.85 annoy
+
+    Difference: -1.3 %
+
+> Short Pure Sine (A = 0.1, d = 1.5 s)
+
+    Mean Psychoacoustic Annoyance
+    ------------------------------
+    MATLAB: 8.65 annoy
+    PYTHON: 8.65 annoy
+
+    Difference: -0.29 %
