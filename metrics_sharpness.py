@@ -10,17 +10,13 @@ from scipy.interpolate import interp1d
 from scipy.fft import fft, ifft
 from scipy.signal.windows import hann, blackman
 from matplotlib import pyplot as plt
-import warnings
-import sys
+import warnings, sys, os, inspect
 
 from sound_metrics import *
 from utilities import *
 from metrics_loudness import Loudness_ISO532_1
 
-__all__ = ["Roughness_Daniel1997"]
-FloatArray = NDArray[np.floating]
-
-def Sharpness_DIN45692(insig=None, fs=None, weight_type=None, LoudnessField=None, 
+def Sharpness_DIN45692(insig=None, fs=None,weight_type=None, LoudnessField=None, 
                       LoudnessMethod=None, time_skip=None, show_sharpness=None, show_loudness=None, dBFS=94, export_excel=None):
     
     # --- WAV file interface ---
@@ -174,11 +170,6 @@ def Sharpness_DIN45692(insig=None, fs=None, weight_type=None, LoudnessField=None
 
     return OUT
 
-# End of Sharpness_DIN45692
-
-###############################################################################
-# Embedded function (compute weighting functions according to required model type)
-
 def il_sharpWeights(z, type, N):
 
     g = np.zeros(len(z))
@@ -200,8 +191,6 @@ def il_sharpWeights(z, type, N):
             g[nt, :] = 0.078 * (np.exp(0.171 * z) / z) * (N[nt] / np.log(0.05 * N[nt] + 1))
 
     return g
-
-# end of il_sharpWeights
 
 check_which = 1
 
