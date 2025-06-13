@@ -60,9 +60,8 @@ exclude_patterns = []
 html_theme = "sphinx_rtd_theme"
 html_static_path = ['_static']
 
-# # add logo
-# html_logo = "images/logo.jpeg"
-# html_theme_options = {
-#     'logo_only': True,
-#     'display_version': False,
-# }
+html_logo = "images/logo.png"
+html_theme_options = {
+    'logo_only': True,
+    'display_version': False,
+}

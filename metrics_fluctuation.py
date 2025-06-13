@@ -19,10 +19,16 @@ from utilities import *
 __all__ = ["FluctuationStrength_Osses2016"]
 FloatArray = NDArray[np.floating]
 
-def FluctuationStrength_Osses2016(insig, fs, method, time_skip=None, show=None, struct_opt=None):
+def FluctuationStrength_Osses2016(insig, fs, method, time_skip=None, show=None, struct_opt=None, dBFS=94, export_excel=None):
     """
     Fluctuation Strength calculation according to Osses et al. (2016)
     """
+    # --- WAV file interface ---
+    if isinstance(insig, str):
+        insig, fs = wav2sig(insig, fs, dBFS)
+
+    elif fs is None:
+        raise ValueError("If insig is not a filename, fs must be provided.")
     
     # Handle default arguments (equivalent to nargin checks)
     if insig is None:
@@ -213,6 +219,9 @@ def FluctuationStrength_Osses2016(insig, fs, method, time_skip=None, show=None, 
         plt.show()
     
     print('')
+
+    if export_excel is not None:
+        export_dict_to_excel(OUT, filename=f"{export_excel}")
     
     return OUT
 
@@ -712,6 +721,8 @@ if __name__ == "__main__":
         rms_target = 0.02
         rms_current_py = np.sqrt(np.mean(signal_py**2))
         signal_py = signal_py * (rms_target / rms_current_py)
+
+        wavfile.write('test_signal_py.wav', fs, signal_py.astype(np.float32))
 
         # --- Run the Python implementation ---
         OUT_py = FluctuationStrength_Osses2016(signal_py, fs, method=1, time_skip=2.0, show=True) # show=False for printing

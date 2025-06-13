@@ -57,7 +57,8 @@ def ob13_iso532_1(insig: np.ndarray, fs: int,
         If fmax > 12500 Hz or fmin < 25 Hz, values are clipped to valid range.
         If fs != 48000 Hz, signal is resampled to 48 kHz.
         
-    .. note::
+    Note
+    ------
     The function implements a bank of cascaded IIR filters as specified in 
     ISO 532-1 standard. Each frequency band uses three cascaded second-order
     sections with coefficients defined in the standard tables A.1 and A.2.
@@ -315,17 +316,27 @@ def gen_weighting_filters(
     uses bilinear transformation (Tustin method) to convert analog prototypes to 
     digital filters.
 
-    :param fs: Sampling frequency in Hz
-    :type fs: int or float
-    :param weighting: Type of weighting filter. Options are 'A', 'B', 'C', 'D', 'R', or 'Z'
-    :type weighting: str, optional
-    :param plot: If True, displays the frequency response plot of the generated filter
-    :type plot: bool, optional
-    :returns: Digital filter coefficients as (numerator, denominator) arrays
-    :rtype: Tuple[np.ndarray, np.ndarray]
-    :raises ValueError: If weighting parameter is not one of the supported types
+    Parameters
+    ----------
+    fs : int or float
+        Sampling frequency in Hz
+    weighting : str, optional
+        Type of weighting filter. Options are 'A', 'B', 'C', 'D', 'R', or 'Z'
+    plot : bool, optional
+        If True, displays the frequency response plot of the generated filter
 
-    .. note::
+    Returns
+    -------
+    Tuple[np.ndarray, np.ndarray]
+        Digital filter coefficients as (numerator, denominator) arrays
+    
+    Raises
+    ------
+    ValueError
+        If weighting parameter is not one of the supported types
+
+    Note
+    ------
         - A-weighting: Most commonly used for general sound level measurements
         - B-weighting: Rarely used, designed for intermediate sound levels
         - C-weighting: Used for high sound levels and peak measurements
@@ -333,11 +344,13 @@ def gen_weighting_filters(
         - R-weighting: Used for audio reproduction systems
         - Z-weighting: Flat frequency response (no weighting)
 
-    .. warning::
+    Warning
+    -------
         The sampling frequency should be at least twice the highest frequency 
         of interest to avoid aliasing effects.
 
-    Example:
+    Examples
+    --------
         >>> # Generate A-weighting filter for 48 kHz sampling rate
         >>> b, a = gen_weighting_filters(48000, 'A', plot=True)
         >>> # Use the filter coefficients with scipy.signal.filtfilt or lfilter
@@ -458,17 +471,8 @@ def do_slm(
     ValueError
         If the input signal is not a 1-D (mono) array.
 
-    Notes
+    Note
     -----
-    The function performs the following processing steps:
-    
-    1. Ensures input is a mono vector
-    2. Applies frequency-weighting IIR filter
-    3. Calibrates signal to Pascals using dBFS reference
-    4. Applies IEC time integrator
-    5. Converts to dB SPL and clamps negative values to 0 dB
-    6. Optionally plots the results with Leq calculation
-
     The calibration uses a dB offset of 0.93 and references to 94 dB SPL.
     The dB SPL conversion uses the standard reference pressure of 2e-5 Pa.
 
@@ -565,35 +569,16 @@ def get_leq(
         - If `dt*fs` or `framelen_s*fs` results in less than 1 sample.
         - If the signal is shorter than the analysis window.
 
-    Notes
+    Note
     -----
-    The equivalent sound level is calculated using the formula:
-    
-    .. math::
-        L_{eq} = 10 \\log_{10}\\left(\\frac{1}{n}\\sum_{i=1}^{n} 10^{L_i/10}\\right)
-    
-    where :math:`L_i` are the individual sound pressure levels in dB.
-
-    Finite values (non-NaN, non-infinite) are used in the calculation. 
     If no finite values are found in a frame, NaN is returned for that frame.
 
     Examples
     --------
-    Whole-signal mode:
-    
     >>> levels = [70, 75, 80, 85, 90]
     >>> leq = get_leq(levels)
     >>> print(f"Overall Leq: {leq[0]:.1f} dB")
     Overall Leq: 81.2 dB
-
-    Running-Leq mode:
-    
-    >>> levels = np.random.normal(75, 5, 1000)  # 1000 samples
-    >>> fs = 44100  # 44.1 kHz sampling rate
-    >>> dt = 0.1    # 100ms hop size
-    >>> leq_time = get_leq(levels, fs=fs, dt=dt)
-    >>> print(f"Number of Leq values: {len(leq_time)}")
-    Number of Leq values: 10
     """
 
     # 1) Ensure 1-D Shape
