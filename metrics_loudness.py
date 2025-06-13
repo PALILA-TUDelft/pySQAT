@@ -735,8 +735,8 @@ def Loudness_ISO532_1(insig, fs=None, field=0, method=2, time_skip=0, show=False
 
     return OUT
 
-def EPNL_FAR_Part36(insig=None, fs=None, method=None, dt=None, threshold=None, show=None):
-    
+def EPNL_FAR_Part36(insig=None, fs=None, method=None, dt=None, threshold=None, show=None, dBFS=94, export_excel=None):
+
     # Handle input arguments similar to MATLAB's nargin
     num_args = sum(x is not None for x in [insig, fs, method, dt, threshold, show])
     
@@ -1053,9 +1053,12 @@ def EPNL_FAR_Part36(insig=None, fs=None, method=None, dt=None, threshold=None, s
 
         plt.show()
 
+    if export_excel is not None:
+        export_dict_to_excel(OUT, filename=f"{export_excel}")
+
     return OUT
 
-check_which = 1
+check_which = 2
 
 if __name__ == "__main__":
     if check_which == 0: # NO TEST
@@ -1132,9 +1135,6 @@ if __name__ == "__main__":
         
         print("Running EPNL_FAR_Part36 test...")
 
-        # ---------------------------------------------------------------------
-        # 1.  Parameters & helpers
-        # ---------------------------------------------------------------------
         fs          = 48_000          # Hz – the filter bank is validated at 48 kHz
         dur_total   = 20.0            # s   – total length
         tone_freq   = 800.0           # Hz  – a typical fan/blade tone
@@ -1145,13 +1145,6 @@ if __name__ == "__main__":
         pref        = 2e-5                          # Pa
         FS_pa       = pref * 10**(dBFS/20)         # 1.0 digital  ↔  94 dB SPL (rms)
 
-        def pa_to_linear(pa_rms: float) -> float:
-            """Convert a desired RMS pressure to full-scale digital amplitude."""
-            return pa_rms / FS_pa
-
-        # ---------------------------------------------------------------------
-        # 2.  Build the broadband component (amplitude-modulated white noise)
-        # ---------------------------------------------------------------------
         t           = np.arange(0, dur_total, 1/fs)
         env         = np.sin(np.pi * t / dur_total)  # 0➜1➜0 half-cos envelope
 
@@ -1159,26 +1152,22 @@ if __name__ == "__main__":
         white_raw   = np.random.randn(len(t))
         white_raw  /= np.sqrt(np.mean(white_raw**2)) # unit RMS
 
-        white       = env * white_raw * pa_to_linear(target_rms)
+        white       = env * white_raw * (target_rms/FS_pa)
 
-        # ---------------------------------------------------------------------
-        # 3.  Add a pure tone that forces the tone-correction path
-        # ---------------------------------------------------------------------
         tone_rms    = pref * 10**(spl_tone/20)       # Pa
-        tone        = pa_to_linear(tone_rms) * np.sin(2*np.pi*tone_freq*t)
+        tone        = (tone_rms/FS_pa) * np.sin(2*np.pi*tone_freq*t)
 
-        # ---------------------------------------------------------------------
-        # 4.  Assemble and call EPNL
-        # ---------------------------------------------------------------------
         flyover     = (white + tone).reshape(-1, 1)  # [n×1] as expected
 
+        flyover = flyover.astype(np.float32)  # convert to float32
+
         OUT = EPNL_FAR_Part36(
-            insig     = flyover,
-            fs        = fs,
-            method    = 1,    # audio-signal input
-            dt        = 0.5,  # 0.5-s analysis blocks (Part 36 default)
-            threshold = 10,   # 10 dB duration threshold
-            show      = True  # let the function draw its figures
-        )
+                insig     = flyover,
+                fs        = fs,
+                method    = 1,    # audio-signal input
+                dt        = 0.5,  # 0.5-s analysis blocks (Part 36 default)
+                threshold = 10,   # 10 dB duration threshold
+                show      = True  # let the function draw its figures
+            )
 
         print(f"EPNL of validation clip: {OUT['EPNL']} EPNdB")
