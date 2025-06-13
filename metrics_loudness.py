@@ -1063,6 +1063,7 @@ if __name__ == "__main__":
         print("metrics_loudness.py")
 
     if check_which == 1: # Loudness_ISO532_1
+        with_wavfile = 0
 
         """
         Validation clip for Loudness_ISO532_1
@@ -1073,19 +1074,10 @@ if __name__ == "__main__":
 
         print("Running Loudness_ISO532_1 test...")
 
-        # ------------------------------------------------------------
-        # 1.  Build a calibrated test signal
-        # ------------------------------------------------------------
         fs = 48_000                      # sampling rate expected by the OB-filter bank
         duration = 5.0                   # seconds
         f_tone = 1_000                   # 1-kHz pure tone
 
-        # ISO 532-1 code uses `dBFS=94`, i.e. a full-scale (|x|=1) sample
-        # represents 94 dB SPL.  To create an *RMS* 70 dB SPL tone we solve:
-        #
-        #   20·log10(A_rms / 2 e-5) = 70  and
-        #   A_peak = A_rms·√2   →   A_peak_FS = A_peak / (10^(94/20)·2 e-5)
-        #
         desired_spl = 70                                   # target acoustic level
         a_rms_pa = 2e-5 * 10**(desired_spl / 20)           # RMS pressure in pascals
         a_peak_pa = a_rms_pa * np.sqrt(2)                  # peak
@@ -1094,22 +1086,30 @@ if __name__ == "__main__":
 
         t = np.arange(0, duration, 1/fs)
         tone = amplitude * np.sin(2 * np.pi * f_tone * t)
+        tone = tone.astype(np.float32)
 
-        # ------------------------------------------------------------
-        # 2.  Call the loudness model
-        # ------------------------------------------------------------
-        OUT = Loudness_ISO532_1(
-            tone,
-            fs,
-            field=0,            # free-field
-            method=2,           # time-varying
-            time_skip=0,        # process whole signal
-            show=True           # draw summary plots
-        )
+        if with_wavfile == 1:
+            wavfile.write("test_L1.wav", fs, tone)
+            OUT = Loudness_ISO532_1(
+                "test_L1.wav",
+                fs,
+                field=0,            # free-field
+                method=2,           # time-varying
+                time_skip=0,        # process whole signal
+                show=True           # draw summary plots
+            )
 
-        # ------------------------------------------------------------
-        # 3.  Summarise a few headline results
-        # ------------------------------------------------------------
+        else:
+            os.remove("test_L1.wav") if os.path.exists("test_L1.wav") else None
+            OUT = Loudness_ISO532_1(
+                tone,
+                fs,
+                field=0,            # free-field
+                method=2,           # time-varying
+                time_skip=0,        # process whole signal
+                show=True           # draw summary plots
+            )
+
         print(f"Overall loudness (median of time-series): {np.median(OUT['InstantaneousLoudness']):.2f} sone")
         print(f"5-percentile loudness N5:  {OUT['N5']} sone")
         print(f"95-percentile loudness N95: {OUT['N95']} sone")

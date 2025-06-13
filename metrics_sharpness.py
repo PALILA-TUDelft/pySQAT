@@ -269,8 +269,7 @@ if __name__ == "__main__":
                 LoudnessMethod=2,       # 1 for stationary, 2 for time-varying
                 time_skip=0.5,          # Skip first 0.5 seconds for statistics (if LoudnessMethod=2)
                 show_sharpness=True,    # Display sharpness results
-                show_loudness=False,     # Display loudness results
-                dBFS=Lp_dB
+                show_loudness=False     # Display loudness results
             )
         else:
             os.remove("test_S1.wav") if os.path.exists("test_S1.wav") else None

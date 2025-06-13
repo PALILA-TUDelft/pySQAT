@@ -703,6 +703,7 @@ if __name__ == "__main__":
         print("metrics_fluctuation.py")
     
     elif check_which == 1: # FluctuationStrength_Osses2016 (original test case)
+        with_wavfile = 0
 
         # --- Generate the exact same input signal (MUST MATCH MATLAB) ---
         fs = 44100
@@ -720,15 +721,15 @@ if __name__ == "__main__":
         rms_target = 0.02
         rms_current_py = np.sqrt(np.mean(signal_py**2))
         signal_py = signal_py * (rms_target / rms_current_py)
+        signal_py = signal_py.astype(np.float32)
 
-        #wavfile.write('test_signal_py.wav', fs, signal_py.astype(np.float32))
-
-        # --- Run the Python implementation ---
-        OUT_py = FluctuationStrength_Osses2016(signal_py, fs, method=1, time_skip=2.0, show=True)
-        #OUT_py = FluctuationStrength_Osses2016('test_signal_py.wav', fs, method=1, time_skip=2.0, show=True)
-
-        # --- Print Key Results for Visual Comparison ---
-        print('\n--- Python Results ---')
+        if with_wavfile == 1:
+            wavfile.write('test_F1.wav', fs, signal_py)
+            OUT_py = FluctuationStrength_Osses2016('test_F1.wav', fs, method=1, time_skip=2.0, show=True)
+        
+        else:
+            os.remove("test_F1.wav") if os.path.exists("test_F1.wav") else None
+            OUT_py = FluctuationStrength_Osses2016(signal_py, fs, method=1, time_skip=2.0, show=True)
 
         print('\nInstantaneous Fluctuation Strength (vacil):')
         print(f'  First 5 values: {OUT_py["InstantaneousFluctuationStrength"][0]:.6f}, {OUT_py["InstantaneousFluctuationStrength"][1]:.6f}, {OUT_py["InstantaneousFluctuationStrength"][2]:.6f}, {OUT_py["InstantaneousFluctuationStrength"][3]:.6f}, {OUT_py["InstantaneousFluctuationStrength"][4]:.6f}')
@@ -751,5 +752,3 @@ if __name__ == "__main__":
         print('\nBark Axis:')
         print(f'  First 5 values: {OUT_py["barkAxis"][0]:.6f}, {OUT_py["barkAxis"][1]:.6f}, {OUT_py["barkAxis"][2]:.6f}, {OUT_py["barkAxis"][3]:.6f}, {OUT_py["barkAxis"][4]:.6f}')
         print(f'  Length: {len(OUT_py["barkAxis"])}')
-
-        print('\n--- Python Output Complete ---')
