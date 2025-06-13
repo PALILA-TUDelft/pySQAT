@@ -1058,7 +1058,7 @@ def EPNL_FAR_Part36(insig=None, fs=None, method=None, dt=None, threshold=None, s
 
     return OUT
 
-check_which = 2
+check_which = 1
 
 if __name__ == "__main__":
     if check_which == 0: # NO TEST
@@ -1080,8 +1080,8 @@ if __name__ == "__main__":
         fs = 48_000                      # sampling rate expected by the OB-filter bank
         duration = 5.0                   # seconds
         f_tone = 1_000                   # 1-kHz pure tone
+        desired_spl = 40                                   # target acoustic level
 
-        desired_spl = 70                                   # target acoustic level
         a_rms_pa = 2e-5 * 10**(desired_spl / 20)           # RMS pressure in pascals
         a_peak_pa = a_rms_pa * np.sqrt(2)                  # peak
         fullscale_pa = 2e-5 * 10**(94 / 20)                # 94 dB SPL corresponds to |x| = 1
@@ -1101,9 +1101,9 @@ if __name__ == "__main__":
                 time_skip=0,        # process whole signal
                 show=True           # draw summary plots
             )
+            os.remove("test_L1.wav") if os.path.exists("test_L1.wav") else None
 
         else:
-            os.remove("test_L1.wav") if os.path.exists("test_L1.wav") else None
             OUT = Loudness_ISO532_1(
                 tone,
                 fs,
@@ -1114,9 +1114,9 @@ if __name__ == "__main__":
             )
 
         print(f"Overall loudness (median of time-series): {np.median(OUT['InstantaneousLoudness']):.2f} sone")
-        print(f"5-percentile loudness N5:  {OUT['N5']} sone")
-        print(f"95-percentile loudness N95: {OUT['N95']} sone")
-        print(f"Loudness level (median):   {np.median(OUT['InstantaneousLoudnessLevel'])} phon")
+        print(f"5-percentile loudness N5:  {OUT['N5'].item():.2f} sone")
+        print(f"95-percentile loudness N95: {OUT['N95'].item():.2f} sone")
+        print(f"Loudness level (median):   {np.median(OUT['InstantaneousLoudnessLevel']):.2f} phon")
 
     elif check_which == 2: # EPNL_FAR_Part36
 

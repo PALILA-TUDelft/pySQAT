@@ -361,7 +361,7 @@ if __name__ == "__main__":
         fc = 1_000.0  # Center frequency = 1 kHz
         bw = 160      # Bandwidth = 160 Hz
         Lp_dB = 60    # Sound Pressure Level = 60 dB SPL
-        duration = 2  # Duration = 2 seconds
+        duration = 5  # Duration = 2 seconds
 
         num_samples = int(fs * duration)
         white_noise = np.random.randn(num_samples)
