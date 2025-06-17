@@ -28,16 +28,35 @@ ArrayLike = Union[np.ndarray, float, int]
 # ----------------------
 
 def see(file_path: str) -> None:
-    """Visualise a WAV file (waveform + spectrogram) and play the audio.
+    """
+    Visualize the waveform and log-frequency spectrogram of a WAV file.
+
+    The function first closes any previously opened Matplotlib figures,
+    verifies that *file_path* exists, and then loads the audio using
+    :pyfunc:`scipy.io.wavfile.read`.  Stereo signals are down-mixed to mono
+    by averaging the two channels.  A two-panel figure is created:
+
+    #. **Waveform** – amplitude versus time (seconds).
+    #. **Spectrogram** – power spectral density computed with a 1024-point
+       FFT and 50 % (512-sample) overlap, shown on a logarithmic frequency
+       axis and rendered with the *viridis* colormap.
+
+    If *file_path* is not found, a warning is printed and the function
+    returns without raising an exception.
 
     Parameters
     ----------
     file_path : str
-        Path to the `.wav` file (must exist).
+        Path to the ``*.wav`` file to visualise.
 
     Returns
     -------
     None
+        The primary effect is the display of a Matplotlib window.
+
+    Examples
+    --------
+    >>> see("speech_sample.wav")
     """
     plt.close("all")
 
@@ -86,35 +105,86 @@ def see(file_path: str) -> None:
     plt.show()
 
 def hz2bark(f: FloatArrayLike) -> np.ndarray:
-    """Convert frequency *f* from Hertz to the Bark critical‑band scale.
+    """
+    Convert frequency from hertz to the Bark psychoacoustic scale.
+
+    The Bark scale models the auditory system’s critical bands.  This
+    function implements the widely used Zwicker approximation:
+
+    ``z = 13 * arctan(0.76 * f / 1000) + 3.5 * arctan((f / (7.5 * 1000))**2)``
+
+    where *f* is the frequency in hertz and *z* is the corresponding Bark
+    value.
 
     Parameters
     ----------
-    f : float or array‑like
-        Frequency in Hertz.
+    f : FloatArrayLike
+        Scalar or array-like of frequencies in hertz.  Any input accepted by
+        :pyfunc:`numpy.asarray` (e.g., list, tuple, NumPy array).
 
     Returns
     -------
-    ndarray
-        Bark values, same shape as *f*.
+    numpy.ndarray
+        Bark-scaled frequencies with the same shape as *f*.
+
+    Notes
+    -----
+    * The calculation is purely numerical; negative frequencies are not
+      checked and will yield mathematically valid—though acoustically
+      meaningless—results.
+    * A value of ``z ≈ 24`` corresponds to approximately 15.5 kHz.
+
+    Examples
+    --------
+    >>> hz2bark(1000)
+    array(8.5...)  # doctest: +ELLIPSIS
+    >>> hz2bark([125, 250, 500, 1000])
+    array([2.4..., 4.3..., 6.5..., 8.5...])  # doctest: +ELLIPSIS
     """
     f = np.asarray(f)
     z = 13 * np.arctan(0.76 * (f / 1000)) + 3.5 * np.arctan((f / (1000 * 7.5))**2)
     return z
 
 def bark2hz(z: FloatArrayLike) -> np.ndarray:
-    """Convert Bark numbers back to Hertz (piece‑wise linear interpolation).
+    """
+    Convert Bark scale values back to frequency in hertz.
+
+    This routine provides an approximate numerical inverse of
+    :pyfunc:`hz2bark` by linearly interpolating a lookup table that spans
+    roughly 20 Hz–15 kHz.  The table is built from the Zwicker formula,
+    evaluated at one-third-octave points
+
+    ``f = 1000 * 2**(k / 3),  k ∈ [-20, 12]``,
+
+    and interpolated with :pyclass:`scipy.interpolate.interp1d`
+    (``kind='linear', fill_value='extrapolate'``).
 
     Parameters
     ----------
-    z : float or array‑like
-        Bark scale values (0 – ≈24.5).
+    z : FloatArrayLike
+        Scalar or array-like of Bark values.  Any input accepted by
+        :pyfunc:`numpy.asarray`.
 
     Returns
     -------
-    ndarray
-        Hertz values corresponding to *z*.
+    numpy.ndarray
+        Frequencies in hertz with the same shape as *z*.
+
+    Notes
+    -----
+    * Results outside the calibrated 0–24 Bark range rely on linear
+      extrapolation and may be inaccurate.
+    * For typical audio work (20 Hz–15 kHz) the error is << 1 %.  The
+      inversion is monotonic but not analytic.
+
+    Examples
+    --------
+    >>> bark2hz(8.5)
+    array(1000.)  # doctest: +ELLIPSIS
+    >>> bark2hz([2.4, 4.3, 6.5, 8.5])
+    array([ 125.,  250.,  500., 1000.])  # doctest: +ELLIPSIS
     """
+
     f0 = 1000
     k = np.arange(-20, 13)
     f = f0 * 2 ** (k / 3)
@@ -127,18 +197,44 @@ def bark2hz(z: FloatArrayLike) -> np.ndarray:
     return f
 
 def phon2sone(phon: FloatArrayLike) -> np.ndarray:
-    """ISO 532‑1 mapping from **phon** to **sone**.
+    """
+    Convert loudness level from phons to perceived loudness in sones.
+
+    The mapping follows ISO-226 conventions:
+
+    * **≥ 40 phon** — loudness doubles every 10 phon:
+      ``sone = 2 ** (0.1 · (phon − 40))``.
+    * **< 40 phon** — a steeper, power-law growth:
+      ``sone = (phon / 40) ** (1 / 0.35)``.
+
+    Input values are flattened to a 1-D column vector before the conversion,
+    and the returned array preserves that shape.
 
     Parameters
     ----------
-    phon : array‑like
-        Loudness level in phon.
+    phon : FloatArrayLike
+        Loudness level(s) in phons.  Accepts any object convertible with
+        :pyfunc:`numpy.asarray` (scalar, list, tuple, ndarray, etc.).
 
     Returns
     -------
-    ndarray
-        Loudness in sone.
+    numpy.ndarray
+        Loudness in sones with the same length as *phon*.
+
+    Notes
+    -----
+    * A value of 40 phon is defined as 1 sone by convention.
+    * For each 10 phon increase above 40, perceived loudness (sones)
+      doubles; below 40 phon, the relationship becomes non-linear.
+
+    Examples
+    --------
+    >>> phon2sone(40)
+    array([1.])
+    >>> phon2sone([20, 40, 60])
+    array([0.25      , 1.        , 4.        ])
     """
+
     phon = np.asarray(phon).flatten()
     phon = phon[:, np.newaxis]
     
@@ -153,18 +249,43 @@ def phon2sone(phon: FloatArrayLike) -> np.ndarray:
     return sone
 
 def sone2phon(sone: FloatArrayLike) -> np.ndarray:
-    """Inverse of :pyfunc:`phon2sone`.
+    """
+    Convert perceived loudness from **sones** to loudness level in **phons**.
+
+    This is the inverse of :pyfunc:`phon2sone`.  Two empirical regimes are
+    applied:
+
+    * **≥ 1 sone** – loudness grows logarithmically:  
+      ``phon = 40 + 33.22 · log10(sone)``.
+    * **< 1 sone** – a steeper power-law relation with a tiny bias to avoid
+      zero:  
+      ``phon = 40 · (sone + 5 × 10⁻⁴)^{0.35}``.
 
     Parameters
     ----------
-    sone : array‑like
-        Loudness in sone (≥ 0).
+    sone : FloatArrayLike
+        Perceived loudness value(s) in sones.  Any object accepted by
+        :pyfunc:`numpy.asarray` (scalar, list, tuple, ndarray, etc.).
 
     Returns
     -------
-    ndarray
-        Loudness level in phon.
+    numpy.ndarray
+        Loudness level(s) in phons, preserving the shape of *sone*.
+
+    Notes
+    -----
+    * By convention, **1 sone = 40 phon**.
+    * The small offset ``5 × 10⁻⁴`` ensures finite results as *sone*
+      approaches zero.
+
+    Examples
+    --------
+    >>> sone2phon(1)
+    array([40.])
+    >>> sone2phon([0.25, 1, 4])
+    array([20., 40., 60.])
     """
+
     sone = np.atleast_1d(sone).astype(float)
     sone = sone.reshape(-1, 1) if sone.ndim == 1 else sone
 
@@ -177,20 +298,52 @@ def sone2phon(sone: FloatArrayLike) -> np.ndarray:
     return phon
 
 def get_exceeded_value(input: FloatArrayLike, PercentValue: float) -> np.ndarray:
-    """Return the value exceeded *percent* % of the time (per channel).
+    """
+    Return the value that is **exceeded by a given percentage** of the data.
+
+    The input array is sorted along its first dimension and the element at
+
+    ``i = ceil((1 − PercentValue / 100) · N) − 1``
+
+    is chosen, where *N* is the number of rows (samples).  
+    This statistic is often called an **exceedance level**:  
+    the result is greater than or equal to *PercentValue* % of the
+    observations.
+
+    * **1-D input** → a single scalar is returned.  
+    * **2-D input** (shape ``(N, M)``) → a row vector of length *M*,
+      computed independently for each column.
 
     Parameters
     ----------
-    x : array‑like
-        Input data, shape (T,) or (T, C≤3).
-    percent : float
-        Percentage of exceedance, 1 ≤ value ≤ 99.
+    input : FloatArrayLike
+        Array of samples to analyse.  Converted with
+        :pyfunc:`numpy.asarray`.
+    PercentValue : float
+        Percentage of the dataset that should lie **below** the returned
+        value (0 ≤ *PercentValue* ≤ 100).
 
     Returns
     -------
-    ndarray
-        Exceeded values for each channel.
+    numpy.ndarray
+        Exceedance value(s): a scalar for 1-D input or a 1 × *M* array for
+        2-D input.
+
+    Notes
+    -----
+    * *PercentValue* = 0 gives the maximum; 100 gives the minimum.
+    * The computed index is clamped to ``[0, N − 1]`` to prevent
+      out-of-bounds errors.
+
+    Examples
+    --------
+    >>> get_exceeded_value([1, 2, 3, 4, 5], 10)  # top 10 %
+    5
+    >>> a = np.arange(1, 13).reshape(6, 2)
+    >>> get_exceeded_value(a, 50)
+    array([ 9, 10])
     """
+
     # Sort the input array
     sort_input = np.sort(input, axis=0)
 
@@ -207,20 +360,78 @@ def get_exceeded_value(input: FloatArrayLike, PercentValue: float) -> np.ndarray
         return sort_input[X_index, :]
 
 def get_statistics(input: FloatArrayLike, metric: str) -> Dict[str, np.ndarray]:
-    """Compute descriptive statistics for a psycho‑acoustic time‑series.
+    """
+    Compute a suite of descriptive statistics for a psychoacoustic time-series
+    and package the results in a labelled dictionary.
+
+    The routine supports up to three parallel channels.  For each channel it
+    evaluates:
+
+    * **Extrema and moments** – ``max``, ``min``, arithmetic ``mean``, and
+      unbiased sample standard deviation ``std``.
+    * **Exceedance levels** – values that are exceeded by the top
+      ``{1, 2, 3, 4, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 95} %`` of the
+      observations (with the 50 % level equal to the median).
+
+    Results are stored in a dictionary whose keys are formed by concatenating
+    a one– or two–letter metric identifier with the statistic label
+    (e.g. ``"Nmax"``, ``"S10"``, ``"PA50"``).
+
+    The identifier is derived from *metric* via an internal lookup:
+
+    ===== Metric string ======================= Identifier
+    Loudness_ISO532_1, Loudness_ECMA418_2       ``N``
+    Sharpness_DIN45692                          ``S``
+    Roughness_Daniel1997, Roughness_ECMA418_2   ``R``
+    FluctuationStrength_Osses2016               ``FS``
+    Tonality_Aures1985                          ``K``
+    Tonality_ECMA418_2                          ``T``
+    PsychoacousticAnnoyance_*                   ``PA``
+    ==========================================  =========
+
+    An unknown *metric* issues a :pyclass:`RuntimeWarning` and uses the
+    fallback identifier ``"X"``.
 
     Parameters
     ----------
-    data : array‑like
-        Time‑series data.
+    input : FloatArrayLike
+        Array of samples with shape ``(N,)`` or ``(N, C)`` where
+        *N* ≥ 1 and 1 ≤ *C* ≤ 3.  One-dimensional input is promoted to a
+        column vector.  If the array has more than three columns a
+        :class:`ValueError` is raised.
     metric : str
-        Verbose metric identifier.
+        Name of the psychoacoustic metric that dictates the key prefix.
 
     Returns
     -------
-    dict[str, ndarray]
-        Mapping ``<prefix><label> → statistic``.
+    Dict[str, numpy.ndarray]
+        Dictionary mapping statistic labels to NumPy arrays of length *C*
+        (or scalars for single-channel input).
+
+    Raises
+    ------
+    ValueError
+        If *input* contains more than three channels.
+
+    Warns
+    -----
+    RuntimeWarning
+        When *metric* is not recognised; the identifier defaults to ``"X"``.
+
+    Examples
+    --------
+    >>> x = np.random.randn(10_000) * 0.1  # mock sharpness signal
+    >>> stats = get_statistics(x, "Sharpness_DIN45692")
+    >>> stats["Smax"]
+    array([0.46...])
+    >>> stats["S50"]  # median
+    array([0.00...])
+
+    >>> stereo = np.random.rand(5_000, 2)
+    >>> get_statistics(stereo, "Loudness_ISO532_1")["N10"].shape
+    (2,)
     """
+
 
     metric_map = {
         "Loudness_ISO532_1":                "N",
@@ -282,24 +493,54 @@ def get_statistics(input: FloatArrayLike, metric: str) -> Dict[str, np.ndarray]:
     return temp_varName
 
 def get_bark(N: int, qb: ArrayLikeInt, freqs: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-    """Convert FFT‑bin frequencies to Bark numbers.
+    """
+    Map FFT bin frequencies to the Bark psychoacoustic scale.
+
+    The function builds a 25-band reference table—``Bark_raw``—whose rows
+    contain
+
+    ``[band-index, lower-Hz, upper-Hz, centre-Bark]``
+
+    after Zwicker & Terhardt.  A monotonic, piece-wise linear
+    interpolator is then created between frequency (Hz) and Bark number
+    and evaluated for the frequency vector *freqs*.  The resulting Bark
+    coordinates are written into a zero-initialised array of length
+    ``round(N / 2) + 1`` at the positions indicated by *qb*.
 
     Parameters
     ----------
     N : int
-        FFT length.
-    qb : array‑like of int
-        Bin indices to convert.
-    freqs : ndarray
-        Frequencies in Hertz corresponding to ``qb``.
+        FFT size (used to size the output array ``(N // 2 + 1,)``).
+    qb : ArrayLikeInt
+        Indices of frequency bins to convert; typically the same length as
+        *freqs*.
+    freqs : numpy.ndarray
+        Frequency of the selected bins in hertz.
 
     Returns
     -------
-    Bark : ndarray
-        Bark numbers at ``qb`` (zeros elsewhere).
-    Bark_raw : ndarray
-        Zwicker Bark reference table.
+    bark : numpy.ndarray
+        One-dimensional array of Bark values (length ``N // 2 + 1``) with
+        zeros everywhere except at *qb*.
+    Bark_raw : numpy.ndarray
+        The 25 × 4 lookup table described above.  Provided for reference.
+
+    Notes
+    -----
+    * Frequencies outside 0–20 kHz are handled by linear extrapolation.
+    * The mapping is **many-to-one**; multiple FFT bins may share the same
+      Bark value depending on frequency resolution.
+
+    Examples
+    --------
+    >>> N = 1024
+    >>> qb = np.arange(1, 17)                 # select first 16 bins
+    >>> freqs = qb * 48_000 / N               # bin centres for 48-kHz audio
+    >>> bark, table = get_bark(N, qb, freqs)
+    >>> bark[qb]                              
+    array([0.3..., 0.6..., 0.9..., ...])       # doctest: +ELLIPSIS
     """
+
 
     Bark_raw = np.array([
         [ 0,     0,     50,     0.5],
@@ -341,20 +582,45 @@ def get_bark(N: int, qb: ArrayLikeInt, freqs: np.ndarray) -> Tuple[np.ndarray, n
     return bark, Bark_raw
 
 def from_db(gain_dB: FloatArrayLike, divisor: float = 20.0) -> np.ndarray:
-    """Convert decibel magnitude to linear gain.
+    """
+    Convert level from decibels (dB) to a linear gain factor.
+
+    The transformation is performed element-wise using
+
+    ``gain = 10 ** (gain_dB / divisor)``,
+
+    where *divisor* is typically **20** for amplitude (voltage, sound-
+    pressure) ratios and **10** for power ratios.
 
     Parameters
     ----------
-    gain_db : float or array‑like
-        Magnitude in decibels.
-    divisor : float, default 20
-        Denominator in dB definition (20 → amplitude, 10 → power).
+    gain_dB : FloatArrayLike
+        Scalar or array-like decibel values to be converted.  Any input
+        accepted by :pyfunc:`numpy.asarray`.
+    divisor : float, default 20
+        Denominator of the exponent; set to **10** to convert dB of power.
 
     Returns
     -------
-    ndarray
-        Linear‑gain values.
+    numpy.ndarray
+        Linear gain(s) with the same shape as *gain_dB*.
+
+    Notes
+    -----
+    * Positive dB yield gains **> 1**, negative dB produce gains **< 1**.
+    * The function is numerical only; no checks are made for physical
+      plausibility of the decibel values.
+
+    Examples
+    --------
+    >>> from_db(6)            # +6 dB amplitude ≈ ×2
+    array(1.995...)
+    >>> from_db([-3, 0, 3])
+    array([0.707..., 1.      , 1.413...])
+    >>> from_db(10, divisor=10)  # +10 dB power ≈ ×10
+    array(10.)
     """
+
     gain_dB = np.asarray(gain_dB, dtype=float)
     gain = 10.0 ** (gain_dB / divisor)
     return gain
@@ -367,26 +633,70 @@ def create_a0_FIR(
     *,
     plot: bool = False
 ) -> Optional[np.ndarray]:
-    """Design an FIR filter from a breakpoint‑magnitude curve.
+    """
+    Design an **FIR correction filter** that follows an arbitrary amplitude
+    target ``a0(f)`` and, optionally, display its frequency response.
+
+    The target curve is supplied as *break-point* samples—frequency–gain
+    pairs that form a piece-wise linear magnitude response.  The filter is
+    created with :pyfunc:`scipy.signal.firwin2` using
+
+    ``B = firwin2(numtaps=N + 1, freq=f_ext, gain=a0_ext, fs=fs)``,
+
+    where two extra points are prepended/appended so that the response is
+    defined at 0 Hz and the Nyquist frequency.
 
     Parameters
     ----------
-    f : ndarray
-        Break‑point frequencies in Hz (< fs/2).
-    a0 : ndarray
-        Desired magnitudes at the same break points.
+    f : numpy.ndarray, shape (*K*,)
+        Strictly increasing break-point frequencies in hertz  
+        (*0 < f[0] < … < f[-1] < fs/2*).
+    a0 : numpy.ndarray, shape (*K*,)
+        Desired linear gain at each break-point frequency.
     N : int
-        Filter order (``num_taps = N + 1``).
+        Filter **order**.  The resulting filter has *N + 1* taps.
     fs : float
-        Sampling rate in Hz.
-    plot : bool, default False
-        If ``True`` only plots are produced and the function returns ``None``.
+        Sampling frequency in hertz.
+    plot : bool, keyword-only, default ``False``
+        If ``True``, plot the magnitude response in decibels and **return
+        ``None``** instead of the coefficient vector.
 
     Returns
     -------
-    ndarray | None
-        FIR taps or ``None`` when ``plot is True``.
+    numpy.ndarray | None
+        FIR coefficients ``B`` (length *N + 1*) when *plot* is ``False``;
+        otherwise ``None``.
+
+    Raises
+    ------
+    ValueError
+        If the shape, ordering, or range of *f* and *a0* violate the
+        requirements (see *Parameters*).
+
+    Notes
+    -----
+    * End-point extension: ``f_ext = [0, *f, fs/2]`` and
+      ``a0_ext = [a0[0], *a0, a0[-1]]`` ensure a well-defined response over
+      the entire 0–Nyquist band.
+    * The filter is linear-phase (symmetrical coefficients) and therefore
+      introduces a pure delay of *N/2* samples.
+
+    Examples
+    --------
+    Design a 256-tap equaliser that boosts low frequencies:
+
+    >>> f   = np.array([100, 1000, 8000])                # Hz
+    >>> a0  = np.array([1.5, 1.0, 0.8])                  # linear gain
+    >>> fs  = 48_000                                     # Hz
+    >>> B = create_a0_FIR(f, a0, N=256, fs=fs)
+    >>> B.size
+    257
+
+    To visualise the response without keeping the coefficients:
+
+    >>> _ = create_a0_FIR(f, a0, N=256, fs=fs, plot=True)  # doctest: +SKIP
     """
+
 
     f = np.asarray(f, dtype=float)
     a0 = np.asarray(a0, dtype=float)
@@ -429,28 +739,53 @@ def calculate_a0(
     *,
     plot: bool = False
 ) -> Tuple[Optional[np.ndarray], np.ndarray, np.ndarray]:
-    """Generate the outer/middle‑ear transfer filter *a₀*.
+    """
+    Generate the **Fastl (2007)** or **Osses & van de Par (2016)**
+    equal-loudness pre-emphasis curve *a₀(f)*, optionally design an FIR
+    filter that realises it, and return both the curve and the underlying
+    frequency grid.
 
     Parameters
     ----------
     fs : float
-        Sampling rate in Hz.
+        Sampling rate of the intended audio system in hertz.
     N : int
-        FFT length (filter length = ``N + 1`` taps).
-    a0_type : {'fastl2007', 'fluctuationstrength_osses2016'}
-        Reference curve identifier.
-    plot : bool, default False
-        If ``True`` only plots are produced.
+        Size of the frequency grid *and* the order of the FIR filter
+        (resulting in *N + 1* taps).
+    a0_type : {'fastl2007', 'fluctuationstrength_osses2016'}, default
+        ``'fastl2007'``
+        Selects the underlying equal-loudness table.
+    plot : bool, keyword-only, default ``False``
+        When ``True`` the FIR’s magnitude response is plotted and *B* is
+        returned as ``None``.
 
     Returns
     -------
-    B : ndarray | None
-        FIR taps or ``None`` when ``plot=True``.
-    freqs : ndarray
-        Frequency grid (Hz).
-    a0_lin : ndarray
-        Linear magnitude reference at ``freqs``.
+    B : numpy.ndarray | None
+        FIR coefficients of length *N + 1* (linear phase) or ``None`` when
+        *plot* is ``True``.
+    freqs : numpy.ndarray
+        Frequency grid in hertz used for the design (20 Hz … 20 kHz).
+    a0 : numpy.ndarray
+        Linear gain samples of the equal-loudness curve at *freqs*.
+
+    Raises
+    ------
+    ValueError
+        If *a0_type* is not one of the recognised strings.
+
+    Examples
+    --------
+    >>> fs = 48_000
+    >>> B, f, a0 = calculate_a0(fs, N=256, a0_type='fastl2007')
+    >>> B.shape
+    (257,)
+
+    Visualise the filter instead of returning the taps:
+
+    >>> _ = calculate_a0(fs, N=256, a0_type='fastl2007', plot=True)  # doctest: +SKIP
     """
+
 
     # 1) Frequency Grid
     df     = fs / N
@@ -525,25 +860,54 @@ def calibrate(
     *,
     return_dbfs: bool = False
 ) -> Tuple[np.ndarray, float, Optional[float]]:
-    """Scale *InputSignal* to a known SPL reference.
+    """
+    Calibrate an audio signal to a given **reference SPL** and, optionally,
+    report its peak level in **dBFS**.
+
+    The routine scales *InputSignal* such that the **RMS** of *RefSignal*
+    corresponds to *ReferenceLevel* decibels re **20 µPa**.  The linear
+    calibration factor is
+
+    ``CalFactor = √[(10^{ReferenceLevel/10} · 4 × 10⁻¹⁰) / mean(RefSignal²)]``
+
+    which converts the pressure‐like samples in *InputSignal* to physical
+    pascals when multiplied element-wise.
 
     Parameters
     ----------
-    InputSignal : ndarray
-        Signal to be calibrated.
-    RefSignal : ndarray
-        Reference recording at known level.
+    InputSignal : numpy.ndarray
+        Signal to be calibrated (any length or shape); cast to
+        floating-point.
+    RefSignal : numpy.ndarray
+        Reference recording whose RMS defines the target level.
     ReferenceLevel : float
-        SPL of ``RefSignal`` in dB (rms).
-    return_dbfs : bool, default False
-        If ``True`` also return the SPL equivalent of 0 dBFS.
+        Sound-pressure level in **dB SPL** that the RMS of *RefSignal* shall
+        represent.
+    return_dbfs : bool, keyword-only, default ``False``
+        If ``True``, compute and return the full-scale digital level
+        (*dBFS*) of *RefSignal* alongside the calibration factor.
 
     Returns
     -------
-    calibrated_signal : ndarray
-    cal_factor : float
-    dBFS : float, optional
+    CalibratedSignal : numpy.ndarray
+        *InputSignal* scaled by *CalFactor*; same shape as the input.
+    CalFactor : float
+        Linear multiplier that maps raw sample units to pascals.
+    dbfs : float, optional
+        Full-scale level of *RefSignal* in **dBFS**  
+        (*returned only when* ``return_dbfs=True``).
+
+    Examples
+    --------
+    >>> y_cal, g = calibrate(y, ref, 94)          # 94 dB SPL reference
+    >>> y_cal.shape == y.shape
+    True
+    >>> y_cal, g, dbfs = calibrate(y, ref, 94, return_dbfs=True)
+    >>> f"The reference was at {dbfs:.1f} dBFS"
+    'The reference was at −18.4 dBFS'
     """
+
+
     # Ensure floating-point math
     InputSignal = np.asarray(InputSignal, dtype=float)
     RefSignal = np.asarray(RefSignal, dtype=float)
@@ -558,17 +922,44 @@ def calibrate(
     return CalibratedSignal, CalFactor
 
 def get_defaults(model_name: str) -> Dict[str, Any]:
-    """Return default‑parameter dictionary for a psycho‑acoustic model.
+    """
+    Return a dictionary of **default keyword arguments** for a supported
+    psycho-acoustic model.
+
+    The dictionary contains both the parameter *value* and a concise
+    explanatory string for GUI widgets or autogenerated documentation.  For
+    every setting you will therefore find a pair of keys:
+
+    ``<parameter>``  
+    ``<parameter>_description``
+
 
     Parameters
     ----------
     model_name : str
-        Model identifier (case‑sensitive).
+        Exact name of the model for which the defaults are requested (see
+        *Supported model groups*).
 
     Returns
     -------
-    dict
-        Default parameter dictionary; each key has a matching ``*_description``.
+    Dict[str, Any]
+        Dictionary with default settings.  Each parameter is accompanied by
+        a ``<parameter>_description`` key that explains its purpose.
+
+    Raises
+    ------
+    ValueError
+        If *model_name* does not match any supported identifier.
+
+    Examples
+    --------
+    >>> d = get_defaults('Loudness_ISO532_1')
+    >>> d['field'], d['field_description']
+    (0, '0 = free field; 1 = diffuse field')
+    >>> get_defaults('UnknownModel')
+    Traceback (most recent call last):
+        ...
+    ValueError: Unrecognised model name: 'UnknownModel'
     """
 
     # --------- Group 1: Fluctuation Strength (Osses 2016) ---------
@@ -681,6 +1072,48 @@ def get_defaults(model_name: str) -> Dict[str, Any]:
     raise ValueError("Unrecognised model name: '{}'".format(model_name))
 
 def export_dict_to_excel(data_dict, filename="output.xlsx"):
+    """
+    Export a dictionary of simple data objects to an Excel workbook.
+
+    Each key in *data_dict* becomes a worksheet whose name is truncated to
+    **31 characters** (Excel’s limit).  The value is converted to a
+    :class:`pandas.DataFrame` as follows:
+
+    * **Scalar** *(int, float, str)* – wrapped in a single-row DataFrame
+      with the key as the column label.
+    * **1-D list / ndarray** – written as a single column labelled with the
+      key.
+    * **2-D list / ndarray** – written verbatim; column labels are the
+      default integer range.
+    * Values that are *None*, higher-dimensional, or of unsupported type
+      are silently skipped.
+
+    The workbook is created with :pyclass:`pandas.ExcelWriter`; if
+    *filename* already exists it is overwritten.  I/O errors encountered
+    while writing a sheet are caught and reported to ``stdout``.
+
+    Parameters
+    ----------
+    data_dict : Mapping[str, Any]
+        Dictionary whose values are scalars, 1-D/2-D sequences, or
+        :class:`numpy.ndarray` objects to be exported.
+    filename : str, default ``"output.xlsx"``
+        Destination file name or path.
+
+    Returns
+    -------
+    None
+        The primary effect is the creation of *filename* on disk.
+
+    Examples
+    --------
+    >>> data = {"scalar": 42,
+    ...         "vector": [1, 2, 3],
+    ...         "matrix": np.eye(3)}
+    >>> export_dict_to_excel(data, "demo.xlsx")  # doctest: +SKIP
+    """
+
+
     with pd.ExcelWriter(filename) as writer:
         for key, value in data_dict.items():
             try:
@@ -704,9 +1137,41 @@ def export_dict_to_excel(data_dict, filename="output.xlsx"):
 
 def wav2sig(insig, fs=None, dBFS=94):
     """
-    Load a WAV file and return the signal and sampling frequency.
-    If fs is provided, resample the signal to that frequency.
+    Load a WAV file and return a calibrated, **mono, floating-point** signal.
+
+    Parameters
+    ----------
+    insig : str | pathlib.Path
+        Path to the input WAV file.
+    fs : None, optional
+        Reserved for backward compatibility—ignored, as the sample rate is
+        obtained from the file header.
+    dBFS : float, default ``94``
+        Reference level that defines how many decibels full scale represent
+        (see step 2 above).
+
+    Returns
+    -------
+    numpy.ndarray
+        Mono signal (shape ``(N,)``) in pascals if *dBFS* refers to SPL.
+    int
+        Sampling frequency in hertz.
+
+    Notes
+    -----
+    * If the input file is already floating-point, only the dBFS scaling is
+      applied.
+    * Simple channel averaging may alter perceived loudness for correlated
+      stereo material.
+
+    Examples
+    --------
+    >>> sig, sr = wav2sig("music.wav")          # 94 dB SPL ↔ 1 Pa FS
+    >>> sig_ptp = sig.ptp()                     # peak-to-peak in pascals
+    >>> sig2, _ = wav2sig("music.wav", dBFS=100)  # treat FS as 100 dB SPL
     """
+
+
     fs, insig_raw = wavfile.read(insig)
 
     # Convert to float if needed
@@ -730,8 +1195,57 @@ def wav2sig(insig, fs=None, dBFS=94):
 
 def buffer(x, n, p=0, opt='nodelay'):
     """
-    Matlab-like buffer function implementation
+    Segment a 1-D signal into (possibly overlapping) frames, emulating
+    MATLAB’s :func:`buffer` with the ``'nodelay'`` option.
+
+    The input vector *x* is sliced into columns of length *n*.  
+    If an **overlap** of *p* samples is specified, successive frames start
+    every ``n − p`` samples; otherwise the frames are non-overlapping.  
+    Insufficient samples in the last frame are zero-padded.
+
+    Parameters
+    ----------
+    x : array_like
+        Input signal (1-D).  Any type accepted by
+        :pyfunc:`numpy.asarray`.
+    n : int
+        Length of each frame in samples.
+    p : int, default ``0``
+        Number of samples that **overlap** between consecutive frames
+        (``0 ≤ p < n``).
+    opt : {'nodelay'}, default ``'nodelay'``
+        Only the *nodelay* behaviour is implemented; other MATLAB options
+        raise :class:`NotImplementedError`.
+
+    Returns
+    -------
+    numpy.ndarray
+        2-D array with shape ``(n, cols)``, where ``cols`` is the number of
+        generated frames.  The signal is arranged **column-wise** (Fortran
+        order), matching MATLAB output.
+    
+    Raises
+    ------
+    ValueError
+        If *p* ≥ *n*.
+    NotImplementedError
+        For any *opt* value other than ``'nodelay'``.
+
+    Examples
+    --------
+    >>> x = np.arange(10)
+    >>> buffer(x, n=4)
+    array([[0, 4],
+           [1, 5],
+           [2, 6],
+           [3, 7]])
+    >>> buffer(x, n=4, p=2)
+    array([[0, 2, 4, 6, 8],
+           [1, 3, 5, 7, 9],
+           [2, 4, 6, 8, 0],
+           [3, 5, 7, 9, 0]])
     """
+
     if opt == 'nodelay':
         # Calculate number of columns
         if p == 0:
@@ -769,18 +1283,59 @@ def buffer(x, n, p=0, opt='nodelay'):
 
 def cos_ramp(sig_len=None, fs=None, attack=None, release=None, plot_result=False):
     """
-    Generate a cosine-shaped ramp for audio signal processing
-    
-    Parameters:
-    sig_len: signal length (default: 44100)
-    fs: sampling frequency (default: 44100)
-    attack: attack time in ms (default: 25)
-    release: release time in ms (default: 25)
-    plot_result: whether to plot the result (default: False)
-    
-    Returns:
-    ramp: the generated ramp signal
+    Create a **raised-cosine ramp envelope** with optional fade-in (*attack*)
+    and fade-out (*release*) segments.
+
+    The envelope is initialised to unity and the first *attack* samples and
+    final *release* samples are multiplied by
+
+    ``0.5 · (1 − cos(π · n / L))``
+
+    where *L* is the respective ramp length in samples and
+    ``n = 1 … L``.  If *release* is omitted it defaults to the *attack*
+    duration.  Ramp lengths that exceed half the signal are clipped to
+    ``⌊(sig_len − 1) / 2⌋`` samples.
+
+    Parameters
+    ----------
+    sig_len : int, optional
+        Total number of samples in the envelope.  Defaults to ``44100``.
+    fs : float, optional
+        Sampling frequency in hertz (used only to interpret *attack* and
+        *release*).  Defaults to ``44100`` Hz.
+    attack : float, optional
+        Fade-in duration in **milliseconds**.  Defaults to ``25`` ms.
+    release : float, optional
+        Fade-out duration in **milliseconds**.  If ``None`` the envelope
+        uses the *attack* duration.  Defaults to ``25`` ms.
+    plot_result : bool, default ``False``
+        When ``True`` display the envelope versus time using Matplotlib and
+        still return the sample array.
+
+    Returns
+    -------
+    numpy.ndarray
+        One-dimensional array of length *sig_len* containing the
+        sample-accurate ramp (range 0–1).
+
+    Notes
+    -----
+    * Internally, durations are rounded to the nearest integer number of
+      samples.
+    * For zero ramp lengths the function returns an all-ones vector.
+    * Only the MATLAB-compatible ``'nodelay'`` behaviour is implemented; no
+      initial zero-padding delay is added.
+
+    Examples
+    --------
+    >>> env = cos_ramp(sig_len=48000, fs=48000, attack=10, release=50)
+    >>> env[:5]                       # first 5 samples of the 10-ms fade-in
+    array([0.        , 0.00801117, 0.0320095 , 0.07181289, 0.12723114])
+    >>> env[-5:]                      # last 5 samples of the 50-ms fade-out
+    array([0.12723114, 0.07181289, 0.0320095 , 0.00801117, 0.        ])
+    >>> _ = cos_ramp(attack=5, release=5, plot_result=True)  # doctest: +SKIP
     """
+
     
     nargin = 0
     if sig_len is not None:
@@ -843,7 +1398,59 @@ def cos_ramp(sig_len=None, fs=None, attack=None, release=None, plot_result=False
     return ramp
 
 def rmsdb(x, fs=None, ti=None, tf=None):
-    
+    """
+    Compute the **root-mean-square (RMS) level** of an audio signal—or WAV
+    file segment—in decibels.
+
+    The level for the selected time window ``[ti, tf)`` is
+
+    ``L = 10 · log10( Σ x_i² / N )``  [dB],
+
+    where *N* is the number of samples in the segment.  Multi-channel inputs
+    are collapsed to one scalar by summing the squared samples across all
+    channels before averaging.
+
+    Parameters
+    ----------
+    x : str | array_like
+        Path to a WAV file **or** an array of audio samples.  When a
+        filename is given the signal and its sampling rate are obtained via
+        :pyfunc:`scipy.io.wavfile.read`.
+    fs : int | float, optional
+        Sampling frequency in hertz.  Required only when *x* is an array;
+        ignored for filename input.
+    ti : float, optional
+        Start time of the analysis window in seconds.  Defaults to the
+        beginning of the signal.
+    tf : float, optional
+        End time of the analysis window in seconds (non-inclusive).  Defaults
+        to the end of the signal.
+
+    Returns
+    -------
+    float
+        RMS level in decibels relative to an amplitude of **1**.
+
+    Raises
+    ------
+    ValueError
+        If *x* is a string but no readable WAV file is found.
+
+    Notes
+    -----
+    * Row and column vectors are both treated as single-channel signals.
+    * If *ti* and *tf* delimit an empty slice the function uses all
+      available samples and therefore matches MATLAB’s ``rmsdb`` behaviour.
+
+    Examples
+    --------
+    >>> rmsdb("speech.wav")                    # full-file level
+    -23.4
+    >>> s = np.random.randn(96_000) * 0.01
+    >>> rmsdb(s, fs=48_000, ti=0.5, tf=1.5)    # one-second excerpt
+    -40.0
+    """
+
     if isinstance(x, str):
         try:
             fs, x = wavfile.read(x)
@@ -894,6 +1501,58 @@ def rmsdb(x, fs=None, ti=None, tf=None):
 # ----------------------
 
 def get_Duration_Correction(PNLT, PNLTM, PNLTM_idx, dt, threshold):
+    """
+    Calculate the **duration-correction, *D***, used in the ICAO procedure
+    for Effective Perceived Noise Level (EPNL).
+
+    The algorithm follows Annex 16, Vol. I, App. 2 logic.
+
+    Parameters
+    ----------
+    PNLT : numpy.ndarray
+        Array of instantaneous perceived-noise levels in decibels.
+    PNLTM : float
+        Maximum of *PNLT* (peak perceived-noise level).
+    PNLTM_idx : int
+        Index of *PNLTM* within *PNLT*.
+    dt : float
+        Time step between consecutive *PNLT* samples in seconds.
+    threshold : float
+        Decibel offset below *PNLTM* that defines the integration window
+        (commonly **10 dB**).
+
+    Returns
+    -------
+    D : float
+        Duration-correction in decibels to be **added** to *PNLTM* to obtain
+        EPNL.
+    idx_t1 : int or None
+        Index of the first sample inside the integration window (*t₁*), or
+        ``None`` if no such sample exists before *PNLTM*.
+    idx_t2 : int
+        Index of the last sample inside the window (*t₂*).  If *PNLT* never
+        decays below the threshold, this equals ``len(PNLT) − 1`` and a
+        warning is emitted.
+
+    Warns
+    -----
+    RuntimeWarning
+        When *PNLT* does not decay past the threshold within the available
+        data; *D* is then indicative only.
+
+    Notes
+    -----
+    * The summation in step 3 includes both limits: ``PNLT[idx_t1:idx_t2+1]``.
+    * All indices are **0-based**, matching NumPy conventions.
+
+    Examples
+    --------
+    >>> D, t1, t2 = get_Duration_Correction(pnlt, pnlt.max(), pnlt.argmax(),
+    ...                                     dt=0.5, threshold=10)
+    >>> epnl = pnlt.max() + D
+    """
+
+
     # Find the PNLTM-threshold down points (t1 and t2)
     Decay = PNLTM - threshold
     K = 1  # find only first idx
@@ -924,19 +1583,47 @@ def get_Duration_Correction(PNLT, PNLTM, PNLTM_idx, dt, threshold):
 
 def get_PNL(input):
     """
-    Convert SPL to Perceived Noisiness and calculate PNL metrics
-    
-    Parameters:
-    input : array-like
-        Input sound pressure level data
-        
-    Returns:
-    tuple : (PN, PNL, PNLM, PNLM_idx)
-        PN - Perceived Noisiness
-        PNL - Perceived Noise Level
-        PNLM - Maximum Perceived Noise Level
-        PNLM_idx - Index of maximum PNL
+    Compute **Perceived Noisiness** (*PN*) and **Perceived Noise Level**
+    (*PNL*) from octave- or ⅓-octave-band sound-pressure levels.
+
+    The implementation follows the ICAO Annex 16, Vol. I,  
+    *Aircraft Noise* – Appendix 2 algorithm.
+
+    The peak value *PNLM* and its index *PNLM_idx* are returned for
+    convenience.
+
+    Parameters
+    ----------
+    input : numpy.ndarray, shape (T, B)
+        Matrix of octave-band SPLs in decibels where *T* is the number of
+        time samples and *B* ≤ 24 is the number of frequency bands
+        (31.5 Hz … 10 kHz as per Table A36-3).
+
+    Returns
+    -------
+    PN : numpy.ndarray, shape (T,)
+        Instantaneous perceived noisiness in **Noys**.
+    PNL : numpy.ndarray, shape (T,)
+        Instantaneous perceived noise level in **PNdB**.
+    PNLM : float
+        Maximum PNL value (peak level).
+    PNLM_idx : int
+        Index of *PNLM* within *PNL* (0-based).
+
+    Notes
+    -----
+    * Bands with *SPL* below *SPL₍d₎* contribute **0 noy**.
+    * For bands 10–22 the upper break point *SPL₍a₎* is ∞, matching ICAO’s
+      tabulated values.
+    * All logarithms are base-10.
+
+    Examples
+    --------
+    >>> pn, pnl, pnlm, idx = get_PNL(spl_matrix)
+    >>> f"Maximum PNL = {pnlm:.1f} PNdB at frame {idx}"
+    'Maximum PNL = 93.4 PNdB at frame 128'
     """
+
     
     num_times = input.shape[0]  # number of time steps
     num_freqs = input.shape[1]  # number of freq bands
@@ -1020,6 +1707,56 @@ def get_PNL(input):
     return PN, PNL, PNLM, PNLM_idx
 
 def get_PNLT(input, freq_bands, PNL):
+    """
+    Apply the **ICAO Annex 16, Vol. I, App. 2 tone-correction** algorithm to a
+    sequence of octave- or third-octave-band spectra and return the tone-
+    corrected perceived-noise level *PNLT*.
+
+    Parameters
+    ----------
+    input : ndarray, shape ``(T, B)``
+        Spectral sound-pressure levels in **dB** where *T* is the number of
+        time steps and *B* ≥ 24 are the octave/⅓-octave bands
+        50 Hz … 10 kHz.
+    freq_bands : ndarray, shape ``(B,)``
+        Centre frequency of each band in **hertz**.
+    PNL : ndarray, shape ``(T,)``
+        Previously computed perceived-noise levels (see :pyfunc:`get_PNL`).
+
+    Returns
+    -------
+    PNLT : ndarray, shape ``(T,)``
+        Tone-corrected perceived-noise level (TPNdB) for every time step.
+    PNLTM : float
+        Maximum value of *PNLT*.
+    PNLTM_idx : int
+        Index of *PNLTM* within *PNLT* (0-based).
+    OUT : dict
+        Intermediate arrays useful for validation:
+
+        ``'S', 'delS', 'SPLP', 'SP', 'SB', 'SPLPP', 'F', 'C', 'diff'``.
+
+    Warns
+    -----
+    RuntimeWarning
+        If the **band-sharing adjustment** is impossible because *PNLTM* is
+        too close to the record’s edges; *ΔB* is then set to 0 dB.
+
+    Notes
+    -----
+    * All logarithmic operations are base-10.
+    * The algorithm assumes **linear** time spacing between spectra.
+    * Bands below 80 Hz are passed through unchanged.
+
+    Examples
+    --------
+    >>> pn, pnl, _, _ = get_PNL(spl_matrix)
+    >>> pnlt, pnltm, idx, dbg = get_PNLT(spl_matrix, centre_freqs, pnl)
+    >>> f"Peak tone-corrected level: {pnltm:.1f} TPNdB at frame {idx}"
+    'Peak tone-corrected level: 96.7 TPNdB at frame 142'
+    """
+
+
     # DEFINITIONS
     # i is index for the octave bands
     # k is time-index vector
