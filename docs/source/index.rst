@@ -19,4 +19,10 @@ It is broken down into the following modules for ease of use.
 
    code_doc/sound_metrics
    code_doc/utilities
+   code_doc/metrics_loudness
+   code_doc/metrics_tonality
+   code_doc/metrics_sharpness
+   code_doc/metrics_roughness
+   code_doc/metrics_fluctuation
+   code_doc/metrics_annoyance
    

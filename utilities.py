@@ -53,10 +53,6 @@ def see(file_path: str) -> None:
     -------
     None
         The primary effect is the display of a Matplotlib window.
-
-    Examples
-    --------
-    >>> see("speech_sample.wav")
     """
     plt.close("all")
 
@@ -133,13 +129,6 @@ def hz2bark(f: FloatArrayLike) -> np.ndarray:
       checked and will yield mathematically valid—though acoustically
       meaningless—results.
     * A value of ``z ≈ 24`` corresponds to approximately 15.5 kHz.
-
-    Examples
-    --------
-    >>> hz2bark(1000)
-    array(8.5...)  # doctest: +ELLIPSIS
-    >>> hz2bark([125, 250, 500, 1000])
-    array([2.4..., 4.3..., 6.5..., 8.5...])  # doctest: +ELLIPSIS
     """
     f = np.asarray(f)
     z = 13 * np.arctan(0.76 * (f / 1000)) + 3.5 * np.arctan((f / (1000 * 7.5))**2)
@@ -176,13 +165,6 @@ def bark2hz(z: FloatArrayLike) -> np.ndarray:
       extrapolation and may be inaccurate.
     * For typical audio work (20 Hz–15 kHz) the error is << 1 %.  The
       inversion is monotonic but not analytic.
-
-    Examples
-    --------
-    >>> bark2hz(8.5)
-    array(1000.)  # doctest: +ELLIPSIS
-    >>> bark2hz([2.4, 4.3, 6.5, 8.5])
-    array([ 125.,  250.,  500., 1000.])  # doctest: +ELLIPSIS
     """
 
     f0 = 1000
@@ -226,13 +208,6 @@ def phon2sone(phon: FloatArrayLike) -> np.ndarray:
     * A value of 40 phon is defined as 1 sone by convention.
     * For each 10 phon increase above 40, perceived loudness (sones)
       doubles; below 40 phon, the relationship becomes non-linear.
-
-    Examples
-    --------
-    >>> phon2sone(40)
-    array([1.])
-    >>> phon2sone([20, 40, 60])
-    array([0.25      , 1.        , 4.        ])
     """
 
     phon = np.asarray(phon).flatten()
@@ -277,13 +252,6 @@ def sone2phon(sone: FloatArrayLike) -> np.ndarray:
     * By convention, **1 sone = 40 phon**.
     * The small offset ``5 × 10⁻⁴`` ensures finite results as *sone*
       approaches zero.
-
-    Examples
-    --------
-    >>> sone2phon(1)
-    array([40.])
-    >>> sone2phon([0.25, 1, 4])
-    array([20., 40., 60.])
     """
 
     sone = np.atleast_1d(sone).astype(float)
@@ -334,14 +302,6 @@ def get_exceeded_value(input: FloatArrayLike, PercentValue: float) -> np.ndarray
     * *PercentValue* = 0 gives the maximum; 100 gives the minimum.
     * The computed index is clamped to ``[0, N − 1]`` to prevent
       out-of-bounds errors.
-
-    Examples
-    --------
-    >>> get_exceeded_value([1, 2, 3, 4, 5], 10)  # top 10 %
-    5
-    >>> a = np.arange(1, 13).reshape(6, 2)
-    >>> get_exceeded_value(a, 50)
-    array([ 9, 10])
     """
 
     # Sort the input array
@@ -417,19 +377,6 @@ def get_statistics(input: FloatArrayLike, metric: str) -> Dict[str, np.ndarray]:
     -----
     RuntimeWarning
         When *metric* is not recognised; the identifier defaults to ``"X"``.
-
-    Examples
-    --------
-    >>> x = np.random.randn(10_000) * 0.1  # mock sharpness signal
-    >>> stats = get_statistics(x, "Sharpness_DIN45692")
-    >>> stats["Smax"]
-    array([0.46...])
-    >>> stats["S50"]  # median
-    array([0.00...])
-
-    >>> stereo = np.random.rand(5_000, 2)
-    >>> get_statistics(stereo, "Loudness_ISO532_1")["N10"].shape
-    (2,)
     """
 
 
@@ -530,15 +477,6 @@ def get_bark(N: int, qb: ArrayLikeInt, freqs: np.ndarray) -> Tuple[np.ndarray, n
     * Frequencies outside 0–20 kHz are handled by linear extrapolation.
     * The mapping is **many-to-one**; multiple FFT bins may share the same
       Bark value depending on frequency resolution.
-
-    Examples
-    --------
-    >>> N = 1024
-    >>> qb = np.arange(1, 17)                 # select first 16 bins
-    >>> freqs = qb * 48_000 / N               # bin centres for 48-kHz audio
-    >>> bark, table = get_bark(N, qb, freqs)
-    >>> bark[qb]                              
-    array([0.3..., 0.6..., 0.9..., ...])       # doctest: +ELLIPSIS
     """
 
 
@@ -610,15 +548,6 @@ def from_db(gain_dB: FloatArrayLike, divisor: float = 20.0) -> np.ndarray:
     * Positive dB yield gains **> 1**, negative dB produce gains **< 1**.
     * The function is numerical only; no checks are made for physical
       plausibility of the decibel values.
-
-    Examples
-    --------
-    >>> from_db(6)            # +6 dB amplitude ≈ ×2
-    array(1.995...)
-    >>> from_db([-3, 0, 3])
-    array([0.707..., 1.      , 1.413...])
-    >>> from_db(10, divisor=10)  # +10 dB power ≈ ×10
-    array(10.)
     """
 
     gain_dB = np.asarray(gain_dB, dtype=float)
@@ -680,21 +609,6 @@ def create_a0_FIR(
       the entire 0–Nyquist band.
     * The filter is linear-phase (symmetrical coefficients) and therefore
       introduces a pure delay of *N/2* samples.
-
-    Examples
-    --------
-    Design a 256-tap equaliser that boosts low frequencies:
-
-    >>> f   = np.array([100, 1000, 8000])                # Hz
-    >>> a0  = np.array([1.5, 1.0, 0.8])                  # linear gain
-    >>> fs  = 48_000                                     # Hz
-    >>> B = create_a0_FIR(f, a0, N=256, fs=fs)
-    >>> B.size
-    257
-
-    To visualise the response without keeping the coefficients:
-
-    >>> _ = create_a0_FIR(f, a0, N=256, fs=fs, plot=True)  # doctest: +SKIP
     """
 
 
@@ -773,17 +687,6 @@ def calculate_a0(
     ------
     ValueError
         If *a0_type* is not one of the recognised strings.
-
-    Examples
-    --------
-    >>> fs = 48_000
-    >>> B, f, a0 = calculate_a0(fs, N=256, a0_type='fastl2007')
-    >>> B.shape
-    (257,)
-
-    Visualise the filter instead of returning the taps:
-
-    >>> _ = calculate_a0(fs, N=256, a0_type='fastl2007', plot=True)  # doctest: +SKIP
     """
 
 
@@ -896,15 +799,6 @@ def calibrate(
     dbfs : float, optional
         Full-scale level of *RefSignal* in **dBFS**  
         (*returned only when* ``return_dbfs=True``).
-
-    Examples
-    --------
-    >>> y_cal, g = calibrate(y, ref, 94)          # 94 dB SPL reference
-    >>> y_cal.shape == y.shape
-    True
-    >>> y_cal, g, dbfs = calibrate(y, ref, 94, return_dbfs=True)
-    >>> f"The reference was at {dbfs:.1f} dBFS"
-    'The reference was at −18.4 dBFS'
     """
 
 
@@ -950,16 +844,6 @@ def get_defaults(model_name: str) -> Dict[str, Any]:
     ------
     ValueError
         If *model_name* does not match any supported identifier.
-
-    Examples
-    --------
-    >>> d = get_defaults('Loudness_ISO532_1')
-    >>> d['field'], d['field_description']
-    (0, '0 = free field; 1 = diffuse field')
-    >>> get_defaults('UnknownModel')
-    Traceback (most recent call last):
-        ...
-    ValueError: Unrecognised model name: 'UnknownModel'
     """
 
     # --------- Group 1: Fluctuation Strength (Osses 2016) ---------
@@ -1104,13 +988,6 @@ def export_dict_to_excel(data_dict, filename="output.xlsx"):
     -------
     None
         The primary effect is the creation of *filename* on disk.
-
-    Examples
-    --------
-    >>> data = {"scalar": 42,
-    ...         "vector": [1, 2, 3],
-    ...         "matrix": np.eye(3)}
-    >>> export_dict_to_excel(data, "demo.xlsx")  # doctest: +SKIP
     """
 
 
@@ -1163,12 +1040,6 @@ def wav2sig(insig, fs=None, dBFS=94):
       applied.
     * Simple channel averaging may alter perceived loudness for correlated
       stereo material.
-
-    Examples
-    --------
-    >>> sig, sr = wav2sig("music.wav")          # 94 dB SPL ↔ 1 Pa FS
-    >>> sig_ptp = sig.ptp()                     # peak-to-peak in pascals
-    >>> sig2, _ = wav2sig("music.wav", dBFS=100)  # treat FS as 100 dB SPL
     """
 
 
@@ -1230,20 +1101,6 @@ def buffer(x, n, p=0, opt='nodelay'):
         If *p* ≥ *n*.
     NotImplementedError
         For any *opt* value other than ``'nodelay'``.
-
-    Examples
-    --------
-    >>> x = np.arange(10)
-    >>> buffer(x, n=4)
-    array([[0, 4],
-           [1, 5],
-           [2, 6],
-           [3, 7]])
-    >>> buffer(x, n=4, p=2)
-    array([[0, 2, 4, 6, 8],
-           [1, 3, 5, 7, 9],
-           [2, 4, 6, 8, 0],
-           [3, 5, 7, 9, 0]])
     """
 
     if opt == 'nodelay':
@@ -1325,15 +1182,6 @@ def cos_ramp(sig_len=None, fs=None, attack=None, release=None, plot_result=False
     * For zero ramp lengths the function returns an all-ones vector.
     * Only the MATLAB-compatible ``'nodelay'`` behaviour is implemented; no
       initial zero-padding delay is added.
-
-    Examples
-    --------
-    >>> env = cos_ramp(sig_len=48000, fs=48000, attack=10, release=50)
-    >>> env[:5]                       # first 5 samples of the 10-ms fade-in
-    array([0.        , 0.00801117, 0.0320095 , 0.07181289, 0.12723114])
-    >>> env[-5:]                      # last 5 samples of the 50-ms fade-out
-    array([0.12723114, 0.07181289, 0.0320095 , 0.00801117, 0.        ])
-    >>> _ = cos_ramp(attack=5, release=5, plot_result=True)  # doctest: +SKIP
     """
 
     
@@ -1441,14 +1289,6 @@ def rmsdb(x, fs=None, ti=None, tf=None):
     * Row and column vectors are both treated as single-channel signals.
     * If *ti* and *tf* delimit an empty slice the function uses all
       available samples and therefore matches MATLAB’s ``rmsdb`` behaviour.
-
-    Examples
-    --------
-    >>> rmsdb("speech.wav")                    # full-file level
-    -23.4
-    >>> s = np.random.randn(96_000) * 0.01
-    >>> rmsdb(s, fs=48_000, ti=0.5, tf=1.5)    # one-second excerpt
-    -40.0
     """
 
     if isinstance(x, str):
@@ -1544,12 +1384,6 @@ def get_Duration_Correction(PNLT, PNLTM, PNLTM_idx, dt, threshold):
     -----
     * The summation in step 3 includes both limits: ``PNLT[idx_t1:idx_t2+1]``.
     * All indices are **0-based**, matching NumPy conventions.
-
-    Examples
-    --------
-    >>> D, t1, t2 = get_Duration_Correction(pnlt, pnlt.max(), pnlt.argmax(),
-    ...                                     dt=0.5, threshold=10)
-    >>> epnl = pnlt.max() + D
     """
 
 
@@ -1616,12 +1450,6 @@ def get_PNL(input):
     * For bands 10–22 the upper break point *SPL₍a₎* is ∞, matching ICAO’s
       tabulated values.
     * All logarithms are base-10.
-
-    Examples
-    --------
-    >>> pn, pnl, pnlm, idx = get_PNL(spl_matrix)
-    >>> f"Maximum PNL = {pnlm:.1f} PNdB at frame {idx}"
-    'Maximum PNL = 93.4 PNdB at frame 128'
     """
 
     
@@ -1747,13 +1575,6 @@ def get_PNLT(input, freq_bands, PNL):
     * All logarithmic operations are base-10.
     * The algorithm assumes **linear** time spacing between spectra.
     * Bands below 80 Hz are passed through unchanged.
-
-    Examples
-    --------
-    >>> pn, pnl, _, _ = get_PNL(spl_matrix)
-    >>> pnlt, pnltm, idx, dbg = get_PNLT(spl_matrix, centre_freqs, pnl)
-    >>> f"Peak tone-corrected level: {pnltm:.1f} TPNdB at frame {idx}"
-    'Peak tone-corrected level: 96.7 TPNdB at frame 142'
     """
 
 

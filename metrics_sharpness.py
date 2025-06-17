@@ -23,44 +23,73 @@ def Sharpness_DIN45692(insig=None, fs=None, weight_type=None, LoudnessField=None
                       LoudnessMethod=None, time_skip=None, show_sharpness=None, show_loudness=None, 
                       dBFS=94, export_excel=None, SpecificLoudness=None, time=None):
     """
-    Unified Sharpness calculation according to DIN45692 standard.
-    
-    This function can operate in two modes:
-    1. From audio signal: Computes loudness first, then sharpness
-    2. From specific loudness: Directly computes sharpness from pre-computed specific loudness
-    
-    Parameters:
-    -----------
-    insig : str or array-like, optional
-        Input signal (audio data) or filename
+    Calculate **Zwicker sharpness** in accordance with *DIN 45692:2009*.
+
+    The routine offers two workflows
+    (selected automatically by the presence of *SpecificLoudness*):
+
+    * **From audio** – the input waveform is converted to stationary or
+      time-varying loudness via :pyfunc:`metrics_loudness.Loudness_ISO532_1`;
+      sharpness is then derived from the resulting specific-loudness
+      pattern.
+    * **From specific loudness** – skip the loudness stage and supply a
+      Bark-band specific-loudness matrix directly.
+
+    Four weighting functions are available:
+
+    ==============  ==========================================================
+    **Function**    **Description**
+    --------------  ----------------------------------------------------------
+    ``'DIN45692'``  Widmann’s *standard* curve (recommended by the norm)
+    ``'aures'``     Aures (1985) loudness-dependent curve
+    ``'bismarck'``  von Bismarck (1974) constant curve
+    ``None``        Raises :class:`ValueError`
+    ==============  ==========================================================
+
+
+    Parameters
+    ----------
+    insig : str | array_like, optional
+        Path to a WAV file **or** mono pressure signal in pascals.  
+        Ignored when *SpecificLoudness* is given.
     fs : float, optional
-        Sampling frequency (required if insig is audio data)
-    weight_type : str, optional
-        Weighting function type ('DIN45692', 'aures', 'bismarck')
-    LoudnessField : int, optional
-        Free field = 0; diffuse field = 1
-    LoudnessMethod : int, optional
-        Method for loudness calculation: stationary = 1; time varying = 2
+        Sampling rate of *insig* in hertz (required when *insig* is an
+        array).
+    weight_type : {'DIN45692', 'aures', 'bismarck'}, default ``'DIN45692'``
+        Sharpness weighting curve.
+    LoudnessField : int, {0, 1}, optional
+        Acoustic field for loudness (0 = free, 1 = diffuse).
+    LoudnessMethod : int, {1, 2}, optional
+        1 = stationary, 2 = time-varying loudness (ignored in
+        *from-loudness* mode).
     time_skip : float, optional
-        Time to skip for statistics calculation
-    show_sharpness : bool, optional
-        Show sharpness plots
-    show_loudness : bool, optional
-        Show loudness results
-    dBFS : float, optional
-        dB Full Scale reference (default: 94)
+        Seconds to discard at the beginning before computing statistics.
+    show_sharpness, show_loudness : bool, optional
+        Display diagnostic plots.
+    dBFS : float, default ``94``
+        SPL represented by a full-scale sine (used when reading WAV).
     export_excel : str, optional
-        Filename for Excel export
-    SpecificLoudness : np.ndarray, optional
-        Pre-computed specific loudness array
-    time : np.ndarray, optional
-        Time vector (required for time-varying specific loudness)
-    
-    Returns:
-    --------
-    OUT : dict
-        Dictionary containing sharpness results and statistics
+        If provided, write output dictionary to *filename* via
+        :pyfunc:`utilities.export_dict_to_excel`.
+    SpecificLoudness : numpy.ndarray, optional
+        Bark-band loudness – shape ``(T, 240)`` for time-varying or
+        ``(1, 240)`` for stationary analysis.
+    time : numpy.ndarray, optional
+        Time vector that matches the rows of *SpecificLoudness*.
+
+    Returns
+    -------
+    dict
+        Dictionary containing instantaneous data and summary statistics.
+
+    Notes
+    -----
+    * The scaling constant *k = 0.11* is chosen so that a 1-kHz sine at
+      60 dB SPL yields **1 acum** with the DIN weighting.
+    * For *from-audio* workflows the signal is resampled to 48 kHz before
+      loudness processing (per ISO 532-1 filterbank requirements).
     """
+
     
     # Determine operation mode based on input
     if SpecificLoudness is not None:

@@ -20,8 +20,65 @@ FloatArray = NDArray[np.floating]
 
 def FluctuationStrength_Osses2016(insig, fs, method, time_skip=None, show=None, struct_opt=None, dBFS=94, export_excel=None):
     """
-    Fluctuation Strength calculation according to Osses et al. (2016)
+    Calculate psycho-acoustic **fluctuation strength** following the model
+    of Osses *et al.* (2016).
+    
+    The routine supports two analysis modes:
+
+    =============  ==============================================================
+    **Method**     **Description**
+    -------------  --------------------------------------------------------------
+    ``0``          *Stationary mode* – the **entire waveform** is processed as a single window (length = signal duration).
+    ``1``          *Time-varying mode* – successive **2-second windows** with 90 % overlap are analysed, producing an instantaneous trace *FS(t)*.
+    =============  ==============================================================
+
+    Parameters
+    ----------
+    insig : str | numpy.ndarray
+        Input waveform.  A string is interpreted as a WAV filename and
+        loaded via :pyfunc:`wav2sig`; otherwise a 1-D NumPy array of
+        samples is expected.
+    fs : int | float
+        Sampling frequency of *insig* (Hz).  Ignored when *insig* is a
+        filename; the file’s native rate is used instead.
+    method : {0, 1}
+        ``0`` – stationary analysis (single window covering the whole
+        signal).  
+        ``1`` – time-varying analysis with 90 %-overlapped 2-s windows.
+    time_skip : float, optional
+        Seconds to omit from the start when statistical descriptors are
+        computed.  Default is 0.
+    show : bool, optional
+        If ``True`` and *method* == 1, plot the instantaneous and specific
+        fluctuation-strength traces.  Default ``False``.
+    struct_opt : dict, optional
+        Additional model options.  Only the key ``'a0_type'`` is currently
+        recognised (default ``'fluctuationstrength_osses2016'``).
+    dBFS : float, default 94
+        Full-scale calibration: a full-scale sine is assumed to equal
+        *dBFS* dB SPL.
+    export_excel : str, optional
+        Path to an ``.xlsx`` file in which all entries of the returned
+        dictionary are written sheet-by-sheet.
+
+    Returns
+    -------
+    dict
+        Dictionary containing instantaneous data and summary statistics.
+
+    Raises
+    ------
+    ValueError
+        If *fs* is omitted when *insig* is given as a NumPy array.
+
+    Notes
+    -----
+    * The signal is resampled to 44.1 kHz (or 48 kHz if already at that
+      rate) because the model parameters are tuned for those rates.
+    * Units – overall fluctuation strength in **vacil**; specific
+      fluctuation strength in **vacil · Bark⁻¹**.
     """
+
     # --- WAV file interface ---
     if isinstance(insig, str):
         insig, fs = wav2sig(insig, fs, dBFS)

@@ -63,7 +63,9 @@ Summary of functions and their purposes.
 ----------
 Functions
 ----------
-Detailed decsription of the functions, including I/O parameters and examples of usage.
+Individual functions are documented in detail below.  Their full
+signatures and parameters are pulled automatically from the source
+code.
 
 .. automodule:: utilities
    :members:

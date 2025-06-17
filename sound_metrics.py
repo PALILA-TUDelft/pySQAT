@@ -19,6 +19,56 @@ import warnings
 __all__ = ["ob13_iso532_1", "gen_weighting_filters", "do_slm", "get_leq"]
 
 def ob13_iso532_1(insig, fs, fmin=None, fmax=None):
+    """
+    One-third-octave filter-bank as specified in **ISO 532-1:2017 (Annex B)**.
+
+    The routine designs and applies a bank of 28 digital IIR filters whose
+    nominal centre frequencies span **25 Hz – 12.5 kHz** in ⅓-oct steps
+    (base-10 formulation).  
+    Each band is realised by **three cascaded biquads** whose coefficients
+    are tabulated in the Standard; an overall linear *gain* aligns the pass-
+    band to 0 dB.  If the input sampling rate is not *48 kHz* the signal is
+    up/down-sampled to that rate with polyphase filtering before processing,
+    because the published coefficients have only been validated at
+    48 kHz.
+
+    A smaller subset of bands can be selected with *fmin* / *fmax*; the
+    filterbank and its gains are trimmed accordingly.
+
+    Parameters
+    ----------
+    insig : array_like
+        Input waveform (mono).  Any shape is accepted but squeezed to 1-D.
+    fs : int or float
+        Sampling frequency of *insig* in hertz.
+    fmin : float, optional
+        Lowest band centre frequency **≥ 25 Hz** to retain.  Defaults to
+        *25 Hz* (no lower limit).
+    fmax : float, optional
+        Highest band centre frequency **≤ 12 500 Hz** to retain.  Defaults
+        to *12 500 Hz* (no upper limit).
+    Returns
+    -------
+    outsig : numpy.ndarray
+        Filtered signal, shape ``(N, B)`` where *N* is the sample count and
+        *B* the number of retained bands.
+    fc : numpy.ndarray
+        Centre frequencies of the columns in *outsig* (hertz).
+
+    Warns
+    -----
+    RuntimeWarning
+        If *fmin* < 25 Hz or *fmax* > 12.5 kHz, the values are clamped to
+        the valid range and a warning is emitted.
+
+    Notes
+    -----
+    * The coefficient tables reproduce ISO 532-1 Annex B (Tables A.1/A.2).
+    * Filter order per band is six (three biquads, **maximally flat**).
+    * Resampling uses :pyfunc:`scipy.signal.resample_poly`.
+    """
+
+
     # Handle input arguments
     if fmin is None:
         bLimit_range = 0
@@ -248,29 +298,48 @@ def gen_weighting_filters(
         weighting: str = "A",
         plot: bool = False
 ) -> Tuple[np.ndarray, np.ndarray]:
+
     """
-    This code employs generates the weighting filters. SOurced from
-    IEC 61672-1:2013, IEC 61672-1:2013, and Osses2010 (thesis), section 2.2.6.
+    Design a digital frequency-weighting filter (*A*, *B*, *C*, *D*, *R*, or *Z*)
+    and return its transfer-function coefficients.
 
-    ORIGINAL MATLAB CODE:
-    Gen_weighting_filters.m   (Osses, Lotinga, 2016) [Last Update:03/04/2025]
-
-    PYTHON IMPLEMENTATION:
-    Gerard Mendoza Ferrandis - 02/05/2025
+    The analogue prototypes for *A–D* follow **IEC 61672-1 : 2013**  
+    (see Annex A for pole/zero values).  They are transformed to digital
+    form with the **bilinear (Tustin) mapping** at the requested sampling
+    rate *fs*.  Weightings *R* (RLB high-pass from ITU-R BS.1770) and *Z*
+    (unity, i.e. no weighting) are supplied directly in discrete-time form.
+    An optional log-magnitude plot up to *fs/2* can be displayed.
 
     Parameters
     ----------
-    fs : float
-        Sampling frequency (Hz).
-    weighting : {'A','B','C','D','Z'}, case-insensitive.
-    plot : bool
-        If True, show a response graph like MATLAB’s internal demo.
+    fs : int | float
+        Sampling frequency in hertz.
+    weighting : {'A', 'B', 'C', 'D', 'R', 'Z'}, default ``'A'``
+        Desired weighting curve (case-insensitive).
+    plot : bool, default ``False``
+        If ``True`` show the magnitude response using
+        :pyfunc:`scipy.signal.freqz` and Matplotlib.
 
     Returns
     -------
-    b, a : ndarray
-        IIR transfer-function coefficients ready for scipy.signal.lfilter.
+    b : numpy.ndarray
+        Numerator coefficients of the **IIR** filter (direct form I).
+    a : numpy.ndarray
+        Denominator coefficients (``a[0] == 1``).
+
+    Raises
+    ------
+    ValueError
+        If *weighting* is not one of the recognised letters.
+
+    Notes
+    -----
+    * Filter order varies: A–C (5th), D (7th), R (2nd), Z (0th, i.e. FIR[0]).
+    * The analogue constants are taken from IEC 61672 except for the
+      additional break frequency *w₅ ≈ 996 rad/s* used by the **B-curve** in
+      Fastl & Zwicker (2010).
     """
+
 
     # 1) IEC 61672-1:2013 Weighting Filter Design (rad s-¹)
     w1 = 129.4273156550629
@@ -349,36 +418,43 @@ def do_slm(
     plot: bool = False,
 ) -> tuple[np.ndarray, float]:
     """
-    This code computes the frequency and time weighting SPL.
-
-    ORIGINAL MATLAB CODE:
-    Do_SLM.m   (Osses, 2016) [Last Update: 22/03/2023]
-
-    PYTHON IMPLEMENTATION:
-    Gerard Mendoza Ferrandis - 02/05/2025
+    Simulate a basic **sound-level meter** compliant with IEC 61672-1 by
+    applying frequency and time weightings to an audio signal.
 
     Parameters
     ----------
-    insig : 1-D array_like
-        Audio waveform in full-scale units (e.g. ±1 from WAV).
+    insig : numpy.ndarray
+        Mono input waveform.
     fs : int | float
-        Sampling rate [Hz].
-    weight_freq : {'A','C','Z'}, default 'A'
-        IEC-61672 frequency weighting.
-    weight_time : {'f','s','i'}, default 'f'
-        Time weighting: fast (125 ms), slow (1 s) or impulse (35 ms).
-    dBFS : float, default 100
-        Level of a full-scale *sine* in dB SPL (94 is common).
-    plot : bool, default False
-        If True, draws a quick-look plot like the original MATLAB version.
+        Sampling frequency in hertz.
+    weight_freq : {'A', 'B', 'C', 'D', 'R', 'Z'}, default ``'A'``
+        Frequency weighting curve; ``'Z'`` means flat (zero weighting).
+    weight_time : {'f', 's', 'i'}, default ``'f'``
+        Time weighting – **f**ast, **s**low, or **i**mpulse (case-insensitive).
+    dBFS : float, default ``100.0``
+        Sound-pressure level, in dB SPL, represented by a full-scale sine.
+    plot : bool, default ``False``
+        When ``True`` show the instantaneous level trace and *L\ :sub:`eq`*.
 
     Returns
     -------
-    outsig_dB : ndarray
-        Instantaneous weighted level [dB(…)].
+    outsig_dB : numpy.ndarray
+        Instantaneous sound level in decibels after both weightings.
     dBFS : float
-        Echo of the `dBFS` argument (handy for callers).
+        The *dBFS* value actually used for calibration (echo of the input).
+
+    Raises
+    ------
+    ValueError
+        If *insig* is not one-dimensional.
+
+    Notes
+    -----
+    * Levels below 0 dB are set to exactly 0 dB for practical display.
+    * The calibration offset ``+0.93 dB`` aligns the response to typical SLM
+      readings at 1 kHz with A-weighting engaged.
     """
+
 
     # 1) Ensure Mono Vector
     insig = np.asarray(insig, dtype=float).squeeze()
@@ -423,33 +499,58 @@ def get_leq(
     framelen_s: float | None = None
 ) -> np.ndarray:
     """
-    This code calculates the equivalent continuous sound level (Leq) from a dB‐SPL trace.
+    Compute the **equivalent continuous sound-pressure level** (*L\ :sub:`eq`*)
+    from a sequence of dB values.
 
-    ORIGINAL MATLAB CODE:
-    Get_Leq.m   (Osses, 2014-2017) [Last Update: 13/07/2016]
+    Two operating modes are supported:
 
-    PYTHON IMPLEMENTATION:
-    Gerard Mendoza Ferrandis - 02/05/2025
+    * **Whole-signal mode** – if *fs* is ``None`` the function returns a
+      single scalar *Leq* for the entire input, ignoring any non-finite
+      samples (``NaN``, ``Inf``).
+    * **Running-Leq mode** – when *fs* is given, the signal is analysed in
+      overlapping windows of length *framelen_s* seconds with a hop size of
+      *dt* seconds (``framelen_s`` defaults to *dt*).  The result is a
+      vector of frame-by-frame *Leq* values.
 
     Parameters
     ----------
-    levels : array-like
-        A-weighted (or other) SPL values in dB.  NaNs are ignored.
+    levels : Sequence[float] | numpy.ndarray
+        One-dimensional array of sound levels in **dB** (any reference).
     fs : float, optional
-        Sampling rate of `levels` in hertz.  If omitted, the whole vector is
-        treated as one frame and a single Leq is returned.
+        Sampling frequency of *levels* in hertz.  Omit to compute a single
+        overall *Leq* (**whole-signal mode**).
     dt : float, optional
-        Hop size between consecutive Leq values, in seconds.  Required when
-        `fs` is given.
+        Hop size between consecutive windows in seconds.  Required for
+        **running-Leq mode**.
     framelen_s : float, optional
-        Frame length in seconds.  Defaults to `dt` when omitted.
+        Window length in seconds; defaults to *dt*.  Must be ≥ *dt*.
 
     Returns
     -------
-    leq : np.ndarray
-        Vector of Leq values in dB.  Length is 1 for whole-signal mode,
-        otherwise equal to the number of frames.
+    numpy.ndarray
+        *Leq* value(s) in decibels:
+
+        * shape ``(1,)`` for whole-signal mode,
+        * shape ``(n_frames,)`` for running-Leq mode.
+
+    Raises
+    ------
+    ValueError
+        If *fs* is supplied without *dt*, if ``dt*fs`` or
+        ``framelen_s*fs`` evaluates to < 1 sample, or if the signal is
+        shorter than the requested analysis window.
+
+    Notes
+    -----
+    * *Leq* is computed as
+
+      ``Leq = 10 · log10( mean( 10 ** (L / 10) ) )``
+
+      where the mean is taken over the finite samples in each window.
+    * Windows containing only non-finite values yield ``NaN`` in the output.
     """
+
+
     # 1) Ensure 1-D Shape
     levels = np.asarray(levels).ravel()
 

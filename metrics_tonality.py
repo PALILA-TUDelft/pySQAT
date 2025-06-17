@@ -25,6 +25,45 @@ FloatArray = NDArray[np.floating]
 
 def Tonality_Aures1985(insig, fs, LoudnessField, time_skip, show=None):
 
+    """
+    Estimate **Aures tonality** :math:`K` *(1985)* for a monaural waveform.
+
+    Parameters
+    ----------
+    insig : array_like
+        Input signal (mono).  If the sampling‐rate *fs* differs from
+        44.1/48 kHz the waveform is polyphase-resampled.
+    fs : int | float
+        Original sampling frequency in hertz.
+    LoudnessField : {0, 1}
+        Acoustic field for the ISO 532-1 loudness calls  
+        ``0 → free field``, ``1 → diffuse field``.
+    time_skip : float
+        Duration in seconds to discard at the beginning when computing
+        summary statistics.
+    show : bool, optional
+        Display diagnostic plots (default: ``True`` if the caller does not
+        capture the return value).
+
+    Returns
+    -------
+    dict
+        Dictionary containing instantaneous data and summary statistics.
+
+    Notes
+    -----
+    *Tonal* and *loudness* weightings are **zero** when no eligible tones
+    are found in a frame.
+
+    Examples
+    --------
+    >>> K = Tonality_Aures1985(sig, 48000, LoudnessField=0,
+    ...                         time_skip=0.2, show=False)
+    >>> K['K50']      # median tonality
+    0.12
+    """
+
+
     if show is None:
         # If no return value is expected, show plots
         show = 1  # Assuming nargout equivalent is handled by caller

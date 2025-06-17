@@ -22,17 +22,49 @@ FloatArray = NDArray[np.floating]
 
 def Roughness_Daniel1997(insig=None, fs=None, time_skip=None, show=None, dBFS=94):
     """
-    Roughness calculation according to Daniel & Weber (1997)
-    
-    Parameters:
-    insig: input signal
-    fs: sampling frequency
-    time_skip: time to skip for statistics calculation
-    show: whether to show plots (1 or 0)
-    
-    Returns:
-    OUT: dictionary containing roughness analysis results
+    Compute psycho-acoustic **roughness** in *asper* following the
+    Daniel & Weber (1997) model.
+
+    The signal is analysed in 200 ms Blackman-windowed frames (50 % overlap).
+    It yields an instantaneous roughness trajectory *R(t)* as well as the
+    underlying specific-roughness matrix *R′(z,t)*.
+
+    Parameters
+    ----------
+    insig : str | numpy.ndarray, optional
+        Either a **filename** (``*.wav``) or a 1-D NumPy array containing the
+        calibrated sound-pressure signal in pascals.  If a filename is passed,
+        the file is read and converted to pascals via
+        :func:`utilities.wav2sig`.
+    fs : float, optional
+        Sampling frequency of *insig* in hertz (required when *insig* is an
+        array).  Signals are internally resampled to 48 kHz for filter-bank
+        compatibility.
+    time_skip : float, default ``0``
+        Start time (s) for the statistical summaries (e.g. *R\\ :sub:`max`*,
+        *R\\ :sub:`5`*); leading segments < *time_skip* are ignored.
+    show : bool, default ``False``
+        If ``True`` the routine displays figures of *R(t)*, the
+        time-averaged specific roughness, and a spectrogram of *R′(z,t)*.
+    dBFS : float, default ``94``
+        Full-scale reference in dB SPL used when converting WAV files
+        (*0 dBFS → dBFS* dB SPL).
+
+    Returns
+    -------
+    dict
+        Dictionary containing instantaneous data and summary statistics.
+
+    Notes
+    -----
+    * Per-frame FFT size *N* = 0.2 s × *fs* (rounded), hop = *N*/2.
+    * The outer- and middle-ear transfer functions, modulation-depth filters,
+      and calibration constants follow the original paper unless noted
+      otherwise in the code comments.
+    * Returned statistics use the portion of the signal from *time_skip*
+      to the end.
     """
+
     
     # --- WAV file interface ---
     if isinstance(insig, str):

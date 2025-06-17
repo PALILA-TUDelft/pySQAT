@@ -25,21 +25,73 @@ FloatArray = NDArray[np.floating]
 
 def Loudness_ISO532_1(insig, fs=None, field=0, method=2, time_skip=0, show=False, dBFS=94, export_excel=None):
     """
-    Implements the Zwicker loudness model according to ISO 532-1:2017. 
+    ISO 532-1 (2017) **Zwicker loudness model** for stationary and
+    time-varying sounds.
 
-    Parameters:
-    - insig: Input signal (array or string for WAV file).
-    - fs: Sampling rate (Hz).
-    - field: Acoustic field type (0 = free field, 1 = diffuse field).
-    - method: Analysis method (0 = stationary, 1 = time-varying).
-    - time_skip: Time to skip from start (seconds).
-    - show: Whether to display plots.
-    - dBFS: Reference full-scale SPL in dB.
-    - export_excel: Path to export results to Excel.
+    The function accepts either a calibrated pressure waveform or third-
+    octave band levels and returns overall, specific, and (optionally)
+    time-resolved loudness quantities.  Three operating modes are offered:
 
-    Returns:
-    - OUT: Dictionary containing loudness metrics.
+    =============  =======================================================
+    **Method**      **Description**
+    -------------  -------------------------------------------------------
+    ``0``          *Stationary* – supply ⅓-octave **SPL** in ``insig``  
+                   (shape ``(1, 24)`` … ``(n, 24)``; 50 Hz–12.5 kHz).
+    ``1``          *Stationary (from audio)* – supply a mono waveform; levels
+                   are averaged after filtering.
+    ``2``          *Time-varying (from audio)* – mono waveform; outputs instantaneous
+                   loudness, loudness level, and specific loudness versus
+                   time.
+    =============  =======================================================
+
+    Parameters
+    ----------
+    insig : ndarray | str
+        *Mode 0* – matrix of ⅓-octave **SPL** values (dB re 20 µPa).  
+        *Modes 1–2* – mono pressure signal in **pascals** or a WAV-file
+        path.
+    fs : int | float, optional
+        Sampling frequency of ``insig`` (Hz).  Ignored when a filename is
+        given or in *mode 0*.
+    field : {0, 1}, default ``0``
+        Acoustic field (0 = free field, 1 = diffuse) used for diffuse-field
+        corrections.
+    method : {0, 1, 2}, default ``2``
+        Processing mode (see table above).
+    time_skip : float, default ``0``
+        Seconds to omit at the beginning when computing statistics or
+        stationary levels.
+    show : bool, default ``False``
+        Plot the main intermediate and final results.
+    dBFS : float, default ``94``
+        SPL represented by a full-scale sine when reading a WAV file.
+    export_excel : str, optional
+        Path to save all returned fields as an **.xlsx** workbook.
+
+    Returns
+    -------
+    dict
+        Dictionary containing instantaneous data and summary statistics.
+
+    Raises
+    ------
+    ValueError
+        If *fs* is missing for waveform input, if an invalid *method* is
+        selected, or when the input dimensions are inconsistent.
+    RuntimeWarning
+        When **method 0** receives an array with ≠ 24 columns.
+
+    Notes
+    -----
+    * Waveforms are resampled to **48 kHz** because the standardised
+      filter-bank is defined for this rate.
+    * Time-varying mode follows the non-linear temporal integration of
+      Zwicker (T<sub>short</sub> = 5 ms, T<sub>var</sub> = 75 ms,
+      T<sub>long</sub> = 15 ms).
+    * All outputs use the Bark scale with 0.1-Bark resolution
+      (``barkAxis`` = 0.1 … 24.0).
     """
+
 
     # --- WAV file interface ---
     if isinstance(insig, str):
@@ -736,6 +788,72 @@ def Loudness_ISO532_1(insig, fs=None, field=0, method=2, time_skip=0, show=False
     return OUT
 
 def EPNL_FAR_Part36(insig=None, fs=None, method=None, dt=None, threshold=None, show=None, dBFS=94, export_excel=None):
+
+    """
+    Calculate the **Effective Perceived Noise Level (EPNL)** in accordance
+    with FAR Part 36 / ICAO Annex 16, Appendix 2.
+
+    The routine supports two input modes:
+
+    =============  =======================================================
+    **Method**      **Description**
+    -------------  -------------------------------------------------------
+    ``0``          *Spectral Mode* – ``insig`` is a 2-D array of third-octave-band *SPL* values ``shape == (n_time, 24)``, covering 50 Hz – 10 kHz.
+    ``1``          *Waveform Mode* – ``insig`` is a calibrated pressure signal in **pascals** (mono).
+    =============  =======================================================
+
+    A ⅓-octave filter-bank is applied internally.
+
+    In both cases the time axis is segmented into blocks of length *dt*
+    seconds, from which the algorithm derives:
+
+    * Perceived noisiness ``PN`` (Noys)  
+    * Perceived noise level ``PNL`` (PNdB)  
+    * Tone-corrected noise level ``PNLT`` (TPNdB)  
+    * Duration correction *D* (dB)
+
+    Finally,
+
+    ``EPNL = max(PNLT) + D``  [EPNdB]
+
+    Parameters
+    ----------
+    insig : ndarray | str
+        *Waveform mode* – mono pressure signal (Pa).  
+        *Spectral mode* – 2-D matrix of SPLs (dB re 20 µPa).  
+        If a string is supplied it is treated as a WAV-filename.
+    fs : int | float
+        Sampling rate of ``insig`` in hertz (ignored in spectral mode).
+    method : {0, 1}, optional
+        0 = spectral input, 1 = waveform input.  If omitted the mode is
+        inferred (waveform assumed when ``insig`` is 1-D).
+    dt : float, default ``0.5``
+        Time step between successive analysis blocks (seconds).
+    threshold : float, default ``10``
+        Tone-correction threshold *PNLT<sub>M</sub> − threshold* (dB).
+    show : bool, default ``False``
+        Plot intermediate results and diagnostic figures.
+    dBFS : float, default ``94``
+        SPL represented by a full-scale sine (waveform mode only).
+    export_excel : str, optional
+        Path where results are written as an **.xlsx** workbook.
+
+    Returns
+    -------
+    dict
+        Dictionary containing instantaneous data and summary statistics.
+
+    Notes
+    -----
+    * Waveforms are resampled to **48 kHz** for compatibility with the ISO
+      532-1 filter-bank.
+    * If ``method = 0`` the input must contain **exactly 24 columns**
+      (50 Hz … 10 kHz).  Otherwise a :class:`RuntimeWarning` is issued and
+      execution stops.
+    * Duration correction *D* is computed between the points *t₁* and *t₂*
+      where *PNLT* crosses ``PNLTM – threshold``.
+    """
+
 
     # Handle input arguments similar to MATLAB's nargin
     num_args = sum(x is not None for x in [insig, fs, method, dt, threshold, show])

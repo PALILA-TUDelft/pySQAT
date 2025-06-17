@@ -20,37 +20,89 @@ from metrics_roughness import Roughness_Daniel1997
 from metrics_fluctuation import FluctuationStrength_Osses2016
 from metrics_tonality import Tonality_Aures1985
 
+__all__ = ['PsychoacousticAnnoyance_Di2016', 'PsychoacousticAnnoyance_Zwicker1999', 'PsychoacousticAnnoyance_More2010']
+
 def PsychoacousticAnnoyance_Di2016(insig=None, fs=None, LoudnessField=None, time_skip=None, showPA=None, show=None, dBFS=94, percentiles=None):
     """
-    function OUT = PsychoacousticAnnoyance_Di2016(insig,fs,LoudnessField,time_skip,showPA,show)
-    
-    This function calculates the Di et al's modified psychoacoustic annoyance 
-      model from an input acoustic signal
-    
-    The modified psychoacoustic annoyance model is according to: (page 201)
-     [1] Di et al., Improvement of Zwicker's psychoacoustic annoyance model 
-         aiming at tonal noises, Applied Acoustics 105 (2016) 164-170
-    
-    - This metric combines five psychoacoustic metrics to quantitatively 
-      describe annoyance:
-     1) Loudness, N (sone) - calculated hereafter following ISO 532-1:2017
-        type <help Loudness_ISO532_1> for more info
-    
-     2) Sharpness, S (acum) - calculated hereafter following DIN 45692:2009
-        NOTE: uses DIN 45692 weighting function by default, please change code if
-        the use of a different withgitng function is desired).
-        type <help Sharpness_DIN45692_from_loudness>
-    
-     3) Roughness, R (asper) - calculated hereafter following Daniel & Weber model
-        type <help Roughness_Daniel1997> for more info
-    
-     4) Fluctuation strength, FS (vacil) - calculated hereafter following 
-        Osses et al. model type <help FluctuationStrength_Osses2016> for more info
-    
-     4) Tonality, K (t.u.) - calculated hereafter following Aures' model
-        type <help Tonality_Aures1985> for more info
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    Compute the **modified psycho-acoustic annoyance (PA)** proposed by
+    Di *et al.* (2016).
+
+    The routine implements the metric described in  
+    Di, Z., Osses, A., van Moorhem, W., &amp; van de Par, S. (2016),  
+    *Acta Acustica united with Acustica, 102*(1), 157-170.  
+    It extends the original Fastl & Zwicker PA model by introducing
+    empirical exponents ``alpha = 0.52`` and ``beta = 6.41`` and by
+    combining loudness (N), sharpness (S), roughness (R),
+    fluctuation-strength (FS) and tonality (K).
+
+    The function has two mutually exclusive modes:
+
+    1. **Signal mode** (default) – provide a waveform *or* the path to a
+       *.wav* file. All intermediate psycho-acoustic metrics are computed
+       internally.
+    2. **Percentile mode** – supply the 5-th percentiles
+       ``(N5, S5, R5, FS5, K5)`` via *percentiles* to obtain a scalar PA
+       directly, bypassing all signal processing.
+
+    Parameters
+    ----------
+    insig : array_like | str | None
+        • *Signal mode* – 1-D audio signal (linear PCM, –1 … 1) **or** a
+        filename pointing to a 16-bit *.wav* file.  
+        • *Percentile mode* – must be *None*.
+    fs : int | float | None
+        Sampling rate in Hz. Required when *insig* is an array. Ignored
+        when *insig* is a filename (read from the file header).
+    LoudnessField : {``'free'``, ``'diffuse'``} | int | None
+        Acoustic field used for specific-loudness calculation
+        (see **ISO-532-1**, method 2). *None* uses the default of
+        ``Loudness_ISO532_1``.
+    time_skip : float | None
+        Initial portion of the signal (in s) to exclude from statistics;
+        has no effect in percentile mode. Defaults to the value expected
+        by each metric (typically 0).
+    showPA : bool | None
+        Whether to plot the resulting PA (time-varying or scalar).
+        • *None* → auto-enabled if no other plotting flags are given.  
+        • Only honoured in signal mode.
+    show : bool | None
+        Plot the intermediate metrics (N, S, R, FS, K). Resolution is
+        automatically adjusted to the signal length. Only honoured in
+        signal mode.
+    dBFS : float, default ``94``
+        Calibration of full-scale digital 0 dBFS in dB-SPL, used when
+        reading *.wav* files.
+    percentiles : tuple[float, float, float, float, float] | None
+        Provide ``(N5, S5, R5, FS5, K5)`` **instead of** a signal to
+        compute a scalar PA directly (percentile mode).
+
+    Returns
+    -------
+    dict
+        Dictionary containing instantaneous data and summary statistics.
+
+    Raises
+    ------
+    ValueError
+        If *fs* is missing when *insig* is an array.
+    RuntimeError
+        When required helper functions are unavailable.
+
+    Notes
+    -----
+    * **Dependencies** – This wrapper relies on external helper
+      functions contained in *utilities.py* and *sound_metrics.py*:
+      ``wav2sig``, ``Loudness_ISO532_1``, ``Sharpness_DIN45692``,
+      ``Roughness_Daniel1997``, ``FluctuationStrength_Osses2016``,
+      ``Tonality_Aures1985``, ``get_statistics``, and
+      the plotting helper ``il_plotter``.
+    * **Signal shorter than 2 s** – Fluctuation-strength cannot be
+      derived with its default windowing; the algorithm therefore falls
+      back to a scalar PA computation.
+    * **Constants** – The PA formula uses
+      ``alpha = 0.52`` and ``beta = 6.41`` (cf. Di *et al.* 2016, Eq. 9).
     """
+
     if percentiles is None:
 
         # --- WAV file interface ---
@@ -314,95 +366,79 @@ def PsychoacousticAnnoyance_Di2016(insig=None, fs=None, LoudnessField=None, time
 
 def PsychoacousticAnnoyance_Zwicker1999(insig=None, fs=None, LoudnessField=None, time_skip=None, showPA=None, show=None, dBFS = 94, percentiles=None):
     """
-    function OUT = PsychoacousticAnnoyance_Zwicker1999(insig,fs,LoudnessField,time_skip,showPA,show)
-    
-    This function calculates the Zwicker's psychoacoustic annoyance model from an input acoustic signal
-    
-    The psychoacoustic annoyance model is according to: (page 327) Zwicker, E. and Fastl, H. Second ed,
-    Psychoacoustics, Facts and Models, 2nd ed. M.R. Schroeder. Springer-Verlag, Berlin, 1999.
-    
-    - This metric combines 4 psychoacoustic metrics to quantitatively describe annoyance:
-    
-       1) Loudness (sone) - calculated hereafter following ISO 532-1:2017
-          type <help Loudness_ISO532_1> for more info
-    
-       2) Sharpness (acum) - calculated hereafter following DIN 45692:2009
-          NOTE: uses DIN 45692 weighting function by default, please change code if
-          the use of a different withgitng function is desired).
-          type <help Sharpness_DIN45692_from_loudness>
-    
-       3) Roughness (asper) - calculated hereafter following Daniel & Weber model
-          type <help Roughness_Daniel1997> for more info
-    
-       4) Fluctuation strength (vacil) - calculated hereafter following Osses et al. model
-          type <help FluctuationStrength_Osses2016> for more info
-    
-    ##########################################################################
-    
-    INPUT:
-      insig : array
-      acoustic signal [1,nTimeSteps], monophonic (Pa)
-    
-      fs : integer
-      sampling frequency (Hz) - preferible 48 kHz or 44.1 kHz (default by the authors and takes less time to compute)
-    
-      time_skip : integer
-      skip start of the signal in <time_skip> seconds for statistics calculations
-    
-      LoudnessField : integer
-      chose field for loudness calculation; free field = 0; diffuse field = 1;
-      type <help Loudness_ISO532_1> for more info
-    
-      show : logical(boolean)
-      optional parameter, display results of loudness, sharpness, roughness and fluctuation strength
-      'false' (disable, default value) or 'true' (enable).
-    
-      showPA : logical(boolean)
-      optional parameter, display results of psychoacoustic annoyance
-      'false' (disable, default value) or 'true' (enable).
-    
-    OUTPUTS:
-      OUT: struct
-         * include results from the psychoacoustic annoyance
-                ** InstantaneousPA: instantaneous quantity (unity) vs time
-                ** ScalarPA : PA (scalar value) computed using the percentile values of each metric.
-                              NOTE: if the signal's length is smaller than 2s, this is the only output as no time-varying PA is calculated
-                ** time : time vector in seconds
-                ** wfr : fluctuation strength and roughness weighting function (not squared)
-                ** ws : sharpness and loudness weighting function (not squared)
-    
-                ** Statistics
-                  *** PAmean : mean value of psychoacoustic annoyance (unit)
-                  *** PAstd : standard deviation of instantaneous psychoacoustic annoyance (unit)
-                  *** PAmax : maximum of instantaneous psychoacoustic annoyance (unit)
-                  *** PAmin : minimum of instantaneous psychoacoustic annoyance (unit)
-                  *** PAx : value exceeded x percent of the time
-    
-         * include structs with the results from the other metrics computed
-           **  L : struct with Loudness results, type <help Loudness_ISO532_1> for more info
-           **  S : struct with Sharpness, type <help Sharpness_DIN45692_from_loudness>
-           **  R : strcut with roughness results, type <help Roughness_Daniel1997> for more info
-           ** FS : struct with fluctuation strength results, type <help FluctuationStrength_Osses2016> for more info
-    
-    
-     NOTE: 1) Input signals should be in pascal values or calibrated .wav files
-    
-           2) Fluctuation strength window has length of 2s. If the signal is less than 2s long, the FS calculation will be automatically
-              changed to stationary (i.e. uses a window with length equal to signal's size) . in this case, no time-varying PA is available.
-    
-           3) Be aware that, because of item 2), if the signal is more than 2s long, the last 2 seconds of the input signal are LOST !!!!
-    
-           4) is a best practice to compute percentile values following a time_skip (s) after the signal's beginning to avoid misleading results caused by possible transient effects caused by digital filtering
-    
-           5) because of item 2), the PA(t) outputs are also 2s smaller, but the percentile values are calculed inside each function before this cut
-    
-           6) Loudness and sharpness have the same time vector, but roughness and FS differ because of their window lengths of 200ms and 2s, respectively.
-              Therefore, in order to have the same time vector, after each respective metric calculation, the outputs are interpolated with respect to the loudness time vector and all cutted in the end
-              to the final time corresponding to the FS metric
-    
-    Author: Gil Felix Greco, Braunschweig 04.03.2020 (updated 14.03.2023)
-    Author: Gil Felix Greco, Braunschweig 16.02.2025 - introduced get_statistics function
-    ###########################################################################
+    Compute the **psycho-acoustic annoyance (PA)** according to the
+    classical model by Zwicker & Fastl (1999).
+
+    The implementation follows the formulation in  
+    Zwicker, E., & Fastl, H. (1999). *Psychoacoustics: Facts and Models*
+    (2nd ed.). Springer, §14.4.  
+    It combines four time-varying psycho-acoustic metrics—loudness (N),
+    sharpness (S), roughness (R) and fluctuation-strength (FS)—into a
+    single annoyance descriptor.
+
+    Two mutually exclusive operating modes are supported:
+
+    1. **Signal mode**  
+       Supply a waveform *or* a path to a *.wav* file.  
+       All underlying metrics are evaluated internally.
+    2. **Percentile mode**  
+       Provide the 5-th percentiles ``(N5, S5, R5, FS5)`` via
+       *percentiles* to obtain a scalar PA directly, bypassing the
+       signal analysis.
+
+    Parameters
+    ----------
+    insig : array_like | str | None
+        • *Signal mode* – mono audio signal (range –1..1) **or** a
+        filename of a 16-bit *.wav* file.  
+        • *Percentile mode* – must be *None*.
+    fs : int | float | None
+        Sampling frequency in Hz (mandatory when *insig* is an array;
+        ignored when *insig* is a filename).
+    LoudnessField : {``'free'``, ``'diffuse'``} | int | None
+        Acoustic field for the ISO 532-1 loudness model
+        (0 = free-field, 1 = diffuse). *None* adopts the default of
+        ``Loudness_ISO532_1``.
+    time_skip : float | None
+        Part of the signal (in s) excluded from statistics; irrelevant in
+        percentile mode.
+    showPA : bool | None
+        Plot the resulting annoyance (time-variant or scalar). If *None*,
+        it auto-enables when *show* is not requested.
+    show : bool | None
+        Plot intermediate metrics (N, S, R, FS). Auto-enabled when
+        *showPA* is not set.
+    dBFS : float, default ``94``
+        Full-scale calibration in dB SPL when reading *.wav* files.
+    percentiles : tuple[float, float, float, float] | None
+        Tuple ``(N5, S5, R5, FS5)`` for percentile mode. When given,
+        *insig* **must** be *None*.
+
+    Returns
+    -------
+    dict
+        Dictionary containing instantaneous data and summary statistics.
+
+    Raises
+    ------
+    ValueError
+        If *fs* is missing while *insig* is an array.
+    RuntimeError
+        When required helper functions cannot be imported.
+
+    Notes
+    -----
+    * **Dependencies** – Requires helper functions in *utilities.py* and
+      *sound_metrics.py*:  
+      ``wav2sig``, ``Loudness_ISO532_1``, ``Sharpness_DIN45692``,
+      ``Roughness_Daniel1997``, ``FluctuationStrength_Osses2016``,
+      ``get_statistics`` and the plotting helper ``il_plotter``.
+    * **Short signals** (< 2 s) – Fluctuation-strength is evaluated with
+      a stationary window; only a scalar PA is returned.
+    * **Model differences** – Unlike the “Di 2016” extension, this
+      version **does not include tonality** or the empirical constants
+      :math:`\alpha` and :math:`\beta`.
+
     """
     
     if percentiles is None:
@@ -685,112 +721,66 @@ def PsychoacousticAnnoyance_Zwicker1999(insig=None, fs=None, LoudnessField=None,
 
 def PsychoacousticAnnoyance_More2010(insig=None, fs=None, LoudnessField=None, time_skip=None, showPA=None, show=None, dBFS = 94, percentiles=None):
     """
-    function OUT = PsychoacousticAnnoyance_More2010(insig,fs,LoudnessField,time_skip,showPA,show)
-    
-    This function calculates the More's modified psychoacoustic annoyance 
-    model from an input acoustic signal
-    
-    The modified psychoacoustic annoyance model is according to: (page 201)
-    [1] More, Shashikant. Aircraft noise characteristics and metrics. 
-        PhD Thesis, Purdue University, 2010
-    
-    - This metric combines 5 psychoacoustic metrics to quantitatively describe annoyance:
-    
-       1) Loudness, N (sone) - calculated hereafter following ISO 532-1:2017
-          type <help Loudness_ISO532_1> for more info
-    
-       2) Sharpness, S (acum) - calculated hereafter following DIN 45692:2009
-          NOTE: uses DIN 45692 weighting function by default, please change code if
-          the use of a different withgitng function is desired).
-          type <help Sharpness_DIN45692_from_loudness>
-    
-       3) Roughness, R (asper) - calculated hereafter following Daniel & Weber model
-          type <help Roughness_Daniel1997> for more info
-    
-       4) Fluctuation strength, FS (vacil) - calculated hereafter following 
-          Osses et al. model, type <help FluctuationStrength_Osses2016> for more info
-    
-       5) Tonality, K (t.u.) - calculated hereafter following Aures' model
-          type <help Tonality_Aures1985> for more info
-    
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    
-    INPUT:
-      insig : array
-      acoustic signal [1,nTimeSteps], monophonic (Pa)
-    
-      fs : integer
-      sampling frequency (Hz) - preferible 48 kHz or 44.1 kHz (default by the authors and takes less time to compute)
-    
-      time_skip : integer
-      skip start of the signal in <time_skip> seconds for statistics calculations
-    
-      LoudnessField : integer
-      chose field for loudness calculation; free field = 0; diffuse field = 1; (used in the loudness and tonality codes)
-      type <help Loudness_ISO532_1> for more info
-    
-      show : logical(boolean)
-      optional parameter, display results of loudness, sharpness, roughness, fluctuation strength and tonality
-      'false' (disable, default value) or 'true' (enable).
-    
-      showPA : logical(boolean)
-      optional parameter, display results of psychoacoustic annoyance
-      'false' (disable, default value) or 'true' (enable).
-    
-    OUTPUTS:
-      OUT: struct
-         * include results from the psychoacoustic annoyance
-                ** InstantaneousPA: instantaneous quantity (unity) vs time
-                ** ScalarPA : PA (scalar value) computed using the percentile values of each metric.
-                              NOTE: if the signal's length is smaller than 2s, this is the only output as no time-varying PA is calculated
-                ** time : time vector in seconds
-                ** wt : tonality and loudness weighting function (not squared)
-                ** wfr : fluctuation strength and roughness weighting function (not squared)
-                ** ws : sharpness and loudness weighting function (not squared)
-    
-                ** Statistics
-                  *** PAmean : mean value of psychoacoustic annoyance (unit)
-                  *** PAstd : standard deviation of instantaneous psychoacoustic annoyance (unit)
-                  *** PAmax : maximum of instantaneous psychoacoustic annoyance (unit)
-                  *** PAmin : minimum of instantaneous psychoacoustic annoyance (unit)
-                  *** PAx : value exceeded x percent of the time
-    
-         * include structs with the results from the other metrics computed
-           **  L : struct with Loudness results, type <help Loudness_ISO532_1> for more info
-           **  S : struct with Sharpness, type <help Sharpness_DIN45692_from_loudness>
-           **  R : strcut with roughness results, type <help Roughness_Daniel1997> for more info
-           ** FS : struct with fluctuation strength results, type <help FluctuationStrength_Osses2016> for more info
-           **  K : struct with tonality results, type <help Tonality_Aures1985> for more info
-    
-     NOTE: 1) Input signals should be in pascal values or calibrated .wav files
-    
-           2) Fluctuation strength window has length of 2s. If the signal is 
-              less than 2s long, the FS calculation will be automatically
-              changed to stationary (i.e. uses a window with length equal to 
-              signal's size). in this case, no time-varying PA is available.
-    
-           3) Be aware that, because of item 2), if the signal is more than 2s 
-              long, the last 2 seconds of the input signal are LOST !!!!
-    
-           4) is a best practice to compute percentile values following a 
-              time_skip (s) after the signal's beginning to avoid misleading 
-              results caused by possible transient effects caused by digital filtering
-    
-           5) because of item 2), the PA(t) outputs are also 2s smaller, but 
-              the percentile values are calculed inside each function before this cut
-    
-           6) Loudness and sharpness have the same time vector, but roughness,
-              FS and tonality differ because of their window lengths.
-              Therefore, in order to have the same time vector, after each 
-              respective metric calculation, the outputs are interpolated 
-              with respect to the loudness time vector and all cutted in the 
-              end to the final time corresponding to the FS metric
-    
-    Author: Gil Felix Greco, Braunschweig 05.04.2023
-    Author: Gil Felix Greco, Braunschweig 16.02.2025 - introduced get_statistics function
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    Compute the **modified psycho-acoustic annoyance (PA)** proposed by
+    More *et al.* (2010).
+
+    The model extends the classic Zwicker & Fastl formula by adding a
+    *tonality* term and six empirically tuned coefficients.
+
+    Two operating modes are available:
+
+    * **Signal mode** – analyse a waveform /*.wav* file and compute
+      *time-varying* and *scalar* PA.
+    * **Percentile mode** – supply the 5-th percentiles
+      ``(N5, S5, R5, FS5, K5)`` to obtain a scalar PA directly.
+
+    Parameters
+    ----------
+    insig : array_like | str | None
+        1-D audio signal (–1…1) **or** path to a 16-bit *.wav* file
+        (signal mode), or *None* (percentile mode).
+    fs : int | float | None
+        Sampling frequency in Hz (required if *insig* is an array;
+        otherwise ignored).
+    LoudnessField : {``'free'``, ``'diffuse'``} | int | None
+        Acoustic field for ISO-532-1 loudness. *None* → default.
+    time_skip : float | None
+        Portion of the signal (s) excluded from statistics.
+    showPA : bool | None
+        Plot the PA results. If *None*, auto-enabled when *show* is not
+        requested.
+    show : bool | None
+        Plot intermediate metrics (N, S, R, FS, K). Auto-enabled when
+        *showPA* is *None*.
+    dBFS : float, default ``94``
+        0 dBFS → *dB* SPL when reading *.wav* files.
+    percentiles : tuple[float, float, float, float, float] | None
+        ``(N5, S5, R5, FS5, K5)`` for percentile mode. In that case
+        *insig* **must** be *None*.
+
+    Returns
+    -------
+    dict
+        Dictionary containing instantaneous data and summary statistics.
+
+    Raises
+    ------
+    ValueError
+        If *fs* is missing while *insig* is an array.
+
+    Notes
+    -----
+    * **Dependencies** – Requires helper functions in *utilities.py* and
+      *sound_metrics.py*:
+
+      ``wav2sig``, ``Loudness_ISO532_1``, ``Sharpness_DIN45692``,
+      ``Roughness_Daniel1997``, ``FluctuationStrength_Osses2016``,
+      ``Tonality_Aures1985``, ``get_statistics`` and ``il_plotter``.
+    * **Short signals** (< 2 s) – FS is evaluated with a stationary
+      window and only a scalar PA is produced.
     """
-    
+
+
     if percentiles is None:
 
         # --- WAV file interface ---
