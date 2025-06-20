@@ -38,9 +38,13 @@ Half-cos Envelope for WHite Noise
 
 > Waveform Mode, dt 0.5, 10 dB threshold
     
-    Timing
+    Original
     ---------------
-    6.893 s
+    0.723 s
+
+    Optimized
+    ---------------
+    0.623 s
 
 ************************
 ** Sharpness_DIN45692 **
