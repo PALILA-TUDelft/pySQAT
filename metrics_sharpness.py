@@ -90,7 +90,6 @@ def Sharpness_DIN45692(insig=None, fs=None, weight_type=None, LoudnessField=None
       loudness processing (per ISO 532-1 filterbank requirements).
     """
 
-    
     # Determine operation mode based on input
     if SpecificLoudness is not None:
         # Mode 2: From specific loudness
@@ -108,10 +107,6 @@ def Sharpness_DIN45692(insig=None, fs=None, weight_type=None, LoudnessField=None
         elif fs is None:
             raise ValueError("If insig is not a filename, fs must be provided.")
 
-        # Default show_loudness and show_sharpness if not explicitly provided
-        # This logic mimics MATLAB's nargout behavior
-        # Using inspect.currentframe() to check if a return value is expected is a heuristic
-        # and might not be robust in all Python contexts. Explicitly passing True/False is preferred.
         if show_loudness is None:
             # Heuristic: if called without assignment, assume display is desired
             if 'return' not in str(inspect.currentframe().f_back.f_code.co_names):
@@ -156,7 +151,7 @@ def Sharpness_DIN45692(insig=None, fs=None, weight_type=None, LoudnessField=None
                 loudness_sones[i] = np.sum(L['InstantaneousSpecificLoudness'][i, :]) * 0.10
 
         z = np.linspace(0.1, 24, n)  # create bark axis
-        
+       
     else:
         # Mode 2: From specific loudness
         if show_sharpness is None:
@@ -246,8 +241,6 @@ def Sharpness_DIN45692(insig=None, fs=None, weight_type=None, LoudnessField=None
             fieldName = fields_OUT_statistics[i]
             if fieldName not in OUT:  # Only copy if OUT does NOT already have this field
                 OUT[fieldName] = OUT_statistics[fieldName]
-        
-        # del OUT_statistics, metric_statistics, fields_OUT_statistics, fieldName # Keep for debugging if needed
         #############################################
 
           
@@ -365,6 +358,7 @@ def il_sharpWeights(z, type, N):
                 g = np.zeros_like(z)
     return g
 
+
 check_which = 1
 
 if __name__ == "__main__":
@@ -426,7 +420,7 @@ if __name__ == "__main__":
             OUT = Sharpness_DIN45692(
                 insig="test_S1a.wav",
                 fs=fs,
-                weight_type='aures', # Example: 'DIN45692', 'bismarck', or 'aures'
+                weight_type='DIN45692', # Example: 'DIN45692', 'bismarck', or 'aures'
                 LoudnessField=0,        # 0 for free field, 1 for diffuse field
                 LoudnessMethod=2,       # 1 for stationary, 2 for time-varying
                 time_skip=0.5,          # Skip first 0.5 seconds for statistics (if LoudnessMethod=2)
@@ -438,7 +432,7 @@ if __name__ == "__main__":
             OUT = Sharpness_DIN45692(
                 insig=insig,
                 fs=fs,
-                weight_type='aures', # Example: 'DIN45692', 'bismarck', or 'aures'
+                weight_type='DIN45692', # Example: 'DIN45692', 'bismarck', or 'aures'
                 LoudnessField=0,        # 0 for free field, 1 for diffuse field
                 LoudnessMethod=2,       # 1 for stationary, 2 for time-varying
                 time_skip=0.5,          # Skip first 0.5 seconds for statistics (if LoudnessMethod=2)

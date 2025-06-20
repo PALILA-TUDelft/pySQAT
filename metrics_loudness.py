@@ -860,29 +860,30 @@ def EPNL_FAR_Part36(insig=None, fs=None, method=None, dt=None, threshold=None, s
       where *PNLT* crosses ``PNLTM – threshold``.
     """
 
-
     # Handle input arguments similar to MATLAB's nargin
     num_args = sum(x is not None for x in [insig, fs, method, dt, threshold, show])
-    
+
     if num_args == 0 or insig is None or fs is None:
         print(EPNL_FAR_Part36.__doc__)
         return
-    elif num_args < 3:  # default situation where insig is a sound file, dt and threshold are set to default values, and plots are not shown
-        method = 1
-        dt = 0.5
-        threshold = 10
-        show = False
-    elif method == 0 and num_args < 4:  # default situation for method == 0, where dt and threshold are set to default values, and plots are not shown
-        dt = 0.5
-        threshold = 10
-        show = False
-    
-    # Set defaults for missing parameters
+
+    # Set defaults for missing parameters in one consolidated block
     if dt is None:
         dt = 0.5
     if threshold is None:
         threshold = 10
     if show is None:
+        show = False
+
+    # Streamlined default assignment logic
+    if num_args < 3:  # default situation where insig is a sound file
+        method = 1
+        dt = 0.5
+        threshold = 10
+        show = False
+    elif method == 0 and num_args < 4:  # default situation for method == 0
+        dt = 0.5
+        threshold = 10
         show = False
 
     if method == 0:
@@ -893,11 +894,10 @@ def EPNL_FAR_Part36(insig=None, fs=None, method=None, dt=None, threshold=None, s
     ##  insig pre-processing stage
 
     fc_TOB = np.array([50, 63, 80, 100, 125, 160, 200, 250, 315, 400, 500, 630,
-                       800, 1000, 1250, 1600, 2000, 2500, 3150, 4000, 5000, 6300, 8000, 10000])  # nominal center freq - preferred for freq. labeling (check Tabel E.1. of IEC 61260-1:2014)
+                    800, 1000, 1250, 1600, 2000, 2500, 3150, 4000, 5000, 6300, 8000, 10000])  # nominal center freq - preferred for freq. labeling (check Tabel E.1. of IEC 61260-1:2014)
 
     num_freqs = len(fc_TOB)  # number of freq bands = nFreq
 
-    # Initialize OUT dictionary
     OUT = {}
 
     if method == 0:  # insig is a [nTime,nFreq] matrix containing nFreq=24 columns containing unweighted SPL values for each third octave band from 50 Hz to 10 kHz
@@ -909,9 +909,11 @@ def EPNL_FAR_Part36(insig=None, fs=None, method=None, dt=None, threshold=None, s
             warnings.warn('For method=0, the insig matrix should have nFreq=24 columns, which corresponds to 1/3 oct. bands from 50 Hz to 10 kHz. Please check the input matrix for the correct dimension!!!')
             return
 
-        InstantaneousSPL = 10.0 * np.log10(np.sum(10.0**(SPL_TOB_spectra/10.0), axis=1))  # assumes insig is given in SPL
+        # Optimized SPL calculation with better numerical stability
+        InstantaneousSPL = 10.0 * np.log10(np.sum(np.power(10.0, SPL_TOB_spectra * 0.1), axis=1))
 
-        time = np.linspace(0, dt*num_times, num_times)  # time vector, in dt time-steps
+        # Optimized time vector creation
+        time = np.arange(num_times) * dt
 
         # OUTPUT
         OUT['InstantaneousSPL'] = InstantaneousSPL
@@ -920,15 +922,16 @@ def EPNL_FAR_Part36(insig=None, fs=None, method=None, dt=None, threshold=None, s
 
     elif method == 1:  # insig is a [nTime,1] array corresponding to a calibrated audio signal (Pa)
 
-        if insig.shape[1] != 1:  # if the insig is not a [Nx1] array
-            insig = insig.T  # correct the dimension of the insig
-
-        # resample to 48 kHz if necessary (this is necessary because the function
-        # <Do_OB13_ISO532_1> generates a 1/3 octave fitler bank which is hard-coded
-        # to work on fs=48 kHz)
-        if fs != 48000:
-            insig = resample(insig.flatten(), int(len(insig) * 48000 / fs))
+        # Optimized dimension correction
+        if insig.ndim == 2 and insig.shape[1] != 1:
+            insig = insig.T
+        elif insig.ndim == 1:
             insig = insig.reshape(-1, 1)
+
+        # resample to 48 kHz if necessary
+        if fs != 48000:
+            insig_flat = insig.flatten()
+            insig = resample(insig_flat, int(len(insig_flat) * 48000 / fs)).reshape(-1, 1)
             fs = 48000
             print(f'\n{sys._getframe().f_code.co_name}: The 1/3 octave band filter bank used in this script has only been validated at a sampling frequency fs=48 kHz, resampling to this fs value\n')
 
@@ -942,35 +945,47 @@ def EPNL_FAR_Part36(insig=None, fs=None, method=None, dt=None, threshold=None, s
 
         insig_P_TOB, _ = ob13_iso532_1(insig, fs, fmin, fmax)  # get 1/3-OB spectra from insig - output is p [nTime,nFreq]
 
-        insig_Psquared_TOB = insig_P_TOB**2  # squaring the filtered signal - output is p^2 [nTime,nFreq]
+        # Optimized power calculation
+        insig_Psquared_TOB = np.square(insig_P_TOB)
 
-        InstantaneousSPL_insig = 10 * np.log10((np.sum(insig_Psquared_TOB, axis=1) + TINY_VALUE) / I_REF)  # sum energetically all 1/3-OB for each time step to get the overall SPL(t)
-        time_insig = np.linspace(1, len_insig, len_insig) / fs # time vector of insig
+        # Optimized SPL calculation with vectorized operations
+        InstantaneousSPL_insig = 10 * np.log10((np.sum(insig_Psquared_TOB, axis=1) + TINY_VALUE) / I_REF)
+        time_insig = np.arange(1, len_insig + 1) / fs  # optimized time vector
 
         # calculate SPL in dt steps
         Nbins = round(fs * dt)  # define dt in N bins
         num_times = int(np.ceil(len_insig / Nbins))  # number of time steps of the signal in N blocks
 
-        Psquared_TOB = np.zeros((num_times, num_freqs))  # declare variable for memory preallocation
+        # Optimized buffering operation - vectorized instead of loop
+        # Pad the signal to make it divisible by Nbins
+        pad_length = num_times * Nbins - len_insig
+        if pad_length > 0:
+            insig_Psquared_TOB_padded = np.pad(insig_Psquared_TOB, ((0, pad_length), (0, 0)), mode='constant')
+        else:
+            insig_Psquared_TOB_padded = insig_Psquared_TOB[:num_times * Nbins]
         
-        for i in range(num_freqs):  # for each i-th freq band, calculate  p^2 averaged along Nbins blocks related to dt
-            # Python equivalent of MATLAB's buffer function
-            signal_padded = np.concatenate([insig_Psquared_TOB[:, i], np.zeros(Nbins - (len_insig % Nbins))])
-            buffered = signal_padded[:num_times * Nbins].reshape(num_times, Nbins)
-            Psquared_TOB[:, i] = np.mean(buffered, axis=1)  # output is p^2[nTime*,nFreq] , where nTime*=round(length(insig)/N)
+        # Reshape and calculate mean in one vectorized operation
+        buffered_data = insig_Psquared_TOB_padded.reshape(num_times, Nbins, num_freqs)
+        Psquared_TOB = np.mean(buffered_data, axis=1)  # output is p^2[nTime*,nFreq]
 
-        SPL_TOB_spectra = 10 * np.log10((Psquared_TOB + TINY_VALUE) / I_REF)  # main SPL[nTime*,nFreq] matrix used for the EPNL calculation
-        InstantaneousSPL = 10 * np.log10((np.sum(Psquared_TOB, axis=1) + TINY_VALUE) / I_REF)  # overall SPL vs. time, in dt time-steps
+        # Optimized SPL calculations
+        SPL_TOB_spectra = 10 * np.log10((Psquared_TOB + TINY_VALUE) / I_REF)  # main SPL[nTime*,nFreq] matrix
+        InstantaneousSPL = 10 * np.log10((np.sum(Psquared_TOB, axis=1) + TINY_VALUE) / I_REF)  # overall SPL vs. time
 
-        time = np.linspace(time_insig[0], time_insig[-1], int(round((time_insig[-1] - time_insig[0]) / dt)) + 1) # time vector, in dt time-steps
-        if len(time) > num_times:
-            time = time[:num_times]
+        # Optimized time vector calculation
+        time_duration = time_insig[-1] - time_insig[0]
+        time_steps = int(round(time_duration / dt)) + 1
+        time = np.linspace(time_insig[0], time_insig[-1], min(time_steps, num_times))
+        
+        # Ensure time vector matches num_times
+        if len(time) < num_times:
+            time = np.linspace(time_insig[0], time_insig[-1], num_times)
 
         # OUTPUT - quantities from the original insig
         OUT['InstantaneousSPL_insig'] = InstantaneousSPL_insig
         OUT['time_insig'] = time_insig
 
-        # OUTPUT  - quantities averaged in dt time steps
+        # OUTPUT - quantities averaged in dt time steps
         OUT['InstantaneousSPL'] = InstantaneousSPL
         OUT['time'] = time
         OUT['SPL_TOB_spectra'] = SPL_TOB_spectra

@@ -14,14 +14,14 @@ import timeit
 
 from sound_metrics import *
 from utilities import *
-from metrics_loudness import Loudness_ISO532_1
+from metrics_loudness import Loudness_ISO532_1, EPNL_FAR_Part36
 from metrics_sharpness import Sharpness_DIN45692
-from metrics_roughness import Roughness_Daniel1997
+#from metrics_roughness import Roughness_Daniel1997
 from metrics_fluctuation import FluctuationStrength_Osses2016
 from metrics_tonality import Tonality_Aures1985
 from metrics_annoyance import PsychoacousticAnnoyance_Di2016, PsychoacousticAnnoyance_Zwicker1999, PsychoacousticAnnoyance_More2010
 
-from test_optimisations import EPNL_FAR_Part36
+from test_optimisations import Roughness_Daniel1997
 
 def check_LOUDNESS_1():
 
@@ -130,7 +130,7 @@ def check_SHARPNESS():
         OUT = Sharpness_DIN45692(
                 insig=insig,
                 fs=fs,
-                weight_type='DIN45692', # Example: 'DIN45692', 'bismarck', or 'aures'
+                weight_type='aures', # Example: 'DIN45692', 'bismarck', or 'aures'
                 LoudnessField=0,        # 0 for free field, 1 for diffuse field
                 LoudnessMethod=2,       # 1 for stationary, 2 for time-varying
                 time_skip=0.5,          # Skip first 0.5 seconds for statistics (if LoudnessMethod=2)
@@ -447,7 +447,7 @@ def check_PA_3():
             print(f"Calculated Psychoacoustic Annoyance (from percentiles): {PA_percentile.item():.4f}")
 
 
-check_which = 1.2
+check_which = 3
 
 if __name__ == "__main__":
 
@@ -455,62 +455,62 @@ if __name__ == "__main__":
           
           check_LOUDNESS_1()
 
-          best = min(timeit.repeat(stmt=check_LOUDNESS_1, repeat=5, number=1))
-          print(f"Best of 5 runs: {best:.3f} s")
+          best = min(timeit.repeat(stmt=check_LOUDNESS_1, repeat=10, number=1))
+          print(f"Best run: {best:.3f} s")
 
     if check_which == 1.2:
           
           check_LOUDNESS_2()
 
-          best = min(timeit.repeat(stmt=check_LOUDNESS_2, repeat=5, number=1))
-          print(f"Best of 5 runs: {best:.3f} s")
+          best = min(timeit.repeat(stmt=check_LOUDNESS_2, repeat=10, number=1))
+          print(f"Best run: {best:.3f} s")
 
     if check_which == 2:
           
           check_SHARPNESS()
 
-          best = min(timeit.repeat(stmt=check_SHARPNESS, repeat=5, number=1))
-          print(f"Best of 5 runs: {best:.3f} s")
+          best = min(timeit.repeat(stmt=check_SHARPNESS, repeat=10, number=1))
+          print(f"Best run: {best:.3f} s")
 
     if check_which == 3:
           
           check_ROUGHNESS()
 
-          best = min(timeit.repeat(stmt=check_ROUGHNESS, repeat=5, number=1))
-          print(f"Best of 5 runs: {best:.3f} s")
+          best = min(timeit.repeat(stmt=check_ROUGHNESS, repeat=10, number=1))
+          print(f"Best run: {best:.3f} s")
 
     if check_which == 4:
           
           check_FLUCTUATION()
 
-          best = min(timeit.repeat(stmt=check_FLUCTUATION, repeat=5, number=1))
-          print(f"Best of 5 runs: {best:.3f} s")
+          best = min(timeit.repeat(stmt=check_FLUCTUATION, repeat=10, number=1))
+          print(f"Best run: {best:.3f} s")
 
     if check_which == 5:
           
           check_TONALITY()
 
-          best = min(timeit.repeat(stmt=check_TONALITY, repeat=5, number=1))
-          print(f"Best of 5 runs: {best:.3f} s")
+          best = min(timeit.repeat(stmt=check_TONALITY, repeat=10, number=1))
+          print(f"Best run: {best:.3f} s")
 
     if check_which == 6.1:
           
           check_PA_1()
 
           best = min(timeit.repeat(stmt=check_PA_1, repeat=5, number=1))
-          print(f"Best of 5 runs: {best:.3f} s")
+          print(f"Best run: {best:.3f} s")
 
     if check_which == 6.2:
             
             check_PA_2()
     
             best = min(timeit.repeat(stmt=check_PA_2, repeat=5, number=1))
-            print(f"Best of 5 runs: {best:.3f} s")
+            print(f"Best run: {best:.3f} s")
 
     if check_which == 6.3:
             
             check_PA_3()
     
             best = min(timeit.repeat(stmt=check_PA_3, repeat=5, number=1))
-            print(f"Best of 5 runs: {best:.3f} s")
+            print(f"Best run: {best:.3f} s")
 

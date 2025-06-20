@@ -23,7 +23,7 @@ SPL (desired_spl): 40 dB SPL
 
     Optimized
     ---------------
-    1.966 s
+    1.909 s
 
 *********************
 ** EPNL_FAR_Part36 **
@@ -44,7 +44,7 @@ Half-cos Envelope for WHite Noise
 
     Optimized
     ---------------
-    0.623 s
+    0.634 s
 
 ************************
 ** Sharpness_DIN45692 **
@@ -58,21 +58,33 @@ SPL (Lp_dB): 60 dB SPL
 
 > DIN45692, free-field, time-varying, skip 0.5
 
-    Timing
+    Original
     ---------------
     6.836 s
 
+    Optimized
+    ---------------
+    2.067 s
+
 > bismarck, free-field, time-varying, skip 0.5
 
-    Timing
+    Original
     ---------------
     6.834 s
 
+    Optimized
+    ---------------
+    2.070 s
+
 > aures, free-field, time-varying, skip 0.5
 
-    Timing
+    Original
     ---------------
     6.849 s
+
+    Optimized
+    ---------------
+    2.077 s
 
 
 **************************
@@ -89,9 +101,13 @@ SPL (L): 60 dB SPL
 
 > no time skip
 
-    Timing
+    Original
     ---------------
     0.618 s
+
+    Optimised
+    ---------------
+    0.629 s
 
 ***********************************
 ** FluctuationStrength_Osses2016 **
