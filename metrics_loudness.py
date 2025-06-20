@@ -126,7 +126,7 @@ def Loudness_ISO532_1(insig, fs=None, field=0, method=2, time_skip=0, show=False
     TINY_VALUE = 1e-12 # Tiny value for adjusting intensity levels for stationary signals
     I_REF = 4e-10 # ref value for stationary signals
     pref = np.sqrt(I_REF) # 2e-5 Pa
-    barkAxis = np.arange(1, 241) / 10  # bark vector
+    barkAxis = np.linspace(0.1, 24.0, 240)  # bark vector
 
     # --- Method selection ---
     if method == 0:
@@ -205,6 +205,9 @@ def Loudness_ISO532_1(insig, fs=None, field=0, method=2, time_skip=0, show=False
 
     else:
         raise ValueError("Invalid method. Choose 0 (stationary), 1 (stationary from audio signal), or 2 (time-varying from audio signal).")
+    
+    del filteredaudio, fc
+    
     # ***********************************************************
     # STEP 4 - Apply weighting factor to the first three 1/3 octave bands
     # ***********************************************************
@@ -255,6 +258,8 @@ def Loudness_ISO532_1(insig, fs=None, field=0, method=2, time_skip=0, show=False
             else:
                 LCB[j, i] = 0
 
+    del Intens, CorrLevel, CBI, FNGi
+
     # **********************************************************************
     # STEP 6 - Calculate core loudness for each critical band
     # **********************************************************************
@@ -298,6 +303,8 @@ def Loudness_ISO532_1(insig, fs=None, field=0, method=2, time_skip=0, show=False
                 if CoreL[j, i] <= 0:
                     CoreL[j, i] = 0
 
+    del Le, DDF, LTQ, DCB, A0
+
     # *************************************************************************
     # STEP 7 - Correction of specific loudness within the lowest critical band
     # *************************************************************************
@@ -307,6 +314,8 @@ def Loudness_ISO532_1(insig, fs=None, field=0, method=2, time_skip=0, show=False
         if CorrCL > 1:
             CorrCL = 1
         CoreL[j, 0] = CoreL[j, 0] * CorrCL
+
+    del CorrCL
 
     # **********************************************************************
     # STEP 8 - Implementation of NL Block
@@ -415,6 +424,8 @@ def Loudness_ISO532_1(insig, fs=None, field=0, method=2, time_skip=0, show=False
                     CoreL[j, i] = Uo
                     # f_nl_lp FUNCTION ENDS
                     Ui += Delta
+
+    del NL_ITER, DeltaT, P, Q, Lambda1, Lambda2, Den, E1, E2, NlLpB
 
     # **********************************************************************
     # STEP 9 - CALCULATE THE SLOPES
@@ -564,6 +575,8 @@ def Loudness_ISO532_1(insig, fs=None, field=0, method=2, time_skip=0, show=False
     for i in range(240):
         Spec_N[i] = np.mean(ns[:,i])
 
+    del z1, n1, iz, z, j, i, ig, z2, n2, dz, k
+
     # *********************************************************
     # STEP 10 - Apply Temporal Weighting to Arbitrary signals
     # *********************************************************
@@ -638,8 +651,8 @@ def Loudness_ISO532_1(insig, fs=None, field=0, method=2, time_skip=0, show=False
         # ***********************************************************************
         OUT = {}
         OUT['barkAxis'] = barkAxis  # Bark vector
-        OUT['time'] = np.arange(len(Total_Loudness)) * 2e-3  # time vector of the final loudness calculation, in seconds
-        OUT['time_insig'] = np.arange(len(insig)) / fs  # time vector of the audio input, in seconds
+        OUT['time'] = np.linspace(0, len(Total_Loudness) - 1, len(Total_Loudness)) * 2e-3  # time vector of the final loudness calculation, in seconds
+        OUT['time_insig'] = np.linspace(0, len(insig) - 1, len(insig)) / fs  # time vector of the audio input, in seconds
         OUT['InstantaneousLoudness'] = Total_Loudness  # Time-varying Loudness, in sone
         OUT['SpecificLoudness'] = Spec_N  # time-averaged specific loudness (sone/Bark)
         OUT['InstantaneousSpecificLoudness'] = ns_dec  # specific loudness (sone/Bark) vs time
@@ -734,9 +747,9 @@ def Loudness_ISO532_1(insig, fs=None, field=0, method=2, time_skip=0, show=False
 
         OUT = {}
         if method == 1: # stationary from audio signal
-            OUT['time_insig'] = np.arange(len(insig)) / fs # time vector of the audio input, in seconds
+            OUT['time_insig'] = np.linspace(0, len(insig) - 1, len(insig)) / fs # time vector of the audio input, in seconds
         
-        OUT['barkAxis'] = (np.arange(1, 241)) / 10 # bark vector
+        OUT['barkAxis'] = np.linspace(0.1, 24.0, 240) # Bark vector
         OUT['SpecificLoudness'] = Spec_N # time-averaged specific loudness (sone/Bark)
         OUT['Loudness'] = N # loudness (sone)
         OUT['LoudnessLevel'] = LN # loudness level (phon)
@@ -939,7 +952,7 @@ def EPNL_FAR_Part36(insig=None, fs=None, method=None, dt=None, threshold=None, s
         insig_Psquared_TOB = insig_P_TOB**2  # squaring the filtered signal - output is p^2 [nTime,nFreq]
 
         InstantaneousSPL_insig = 10 * np.log10((np.sum(insig_Psquared_TOB, axis=1) + TINY_VALUE) / I_REF)  # sum energetically all 1/3-OB for each time step to get the overall SPL(t)
-        time_insig = np.arange(1, len_insig + 1) / fs  # time vector of insig
+        time_insig = np.linspace(1, len_insig, len_insig) / fs # time vector of insig
 
         # calculate SPL in dt steps
         Nbins = round(fs * dt)  # define dt in N bins
@@ -956,7 +969,7 @@ def EPNL_FAR_Part36(insig=None, fs=None, method=None, dt=None, threshold=None, s
         SPL_TOB_spectra = 10 * np.log10((Psquared_TOB + TINY_VALUE) / I_REF)  # main SPL[nTime*,nFreq] matrix used for the EPNL calculation
         InstantaneousSPL = 10 * np.log10((np.sum(Psquared_TOB, axis=1) + TINY_VALUE) / I_REF)  # overall SPL vs. time, in dt time-steps
 
-        time = np.arange(time_insig[0], time_insig[-1] + dt, dt)  # time vector, in dt time-steps
+        time = np.linspace(time_insig[0], time_insig[-1], int(round((time_insig[-1] - time_insig[0]) / dt)) + 1) # time vector, in dt time-steps
         if len(time) > num_times:
             time = time[:num_times]
 
@@ -970,7 +983,6 @@ def EPNL_FAR_Part36(insig=None, fs=None, method=None, dt=None, threshold=None, s
         OUT['SPL_TOB_spectra'] = SPL_TOB_spectra
         OUT['TOB_freq'] = fc_TOB
 
-        # Clean up variables (equivalent to MATLAB's clear)
         del I_REF, fmin, fmax, Nbins
 
     ## Calculate EPNL
@@ -1205,7 +1217,7 @@ if __name__ == "__main__":
         fullscale_pa = 2e-5 * 10**(94 / 20)                # 94 dB SPL corresponds to |x| = 1
         amplitude = a_peak_pa / fullscale_pa               # peak value in ±1 full-scale units
 
-        t = np.arange(0, duration, 1/fs)
+        t = np.linspace(0, duration, int(duration*fs), endpoint=False)  # time vector
         tone = amplitude * np.sin(2 * np.pi * f_tone * t)
         tone = tone.astype(np.float32)
 
@@ -1263,7 +1275,7 @@ if __name__ == "__main__":
         pref        = 2e-5                          # Pa
         FS_pa       = pref * 10**(dBFS/20)         # 1.0 digital  ↔  94 dB SPL (rms)
 
-        t           = np.arange(0, dur_total, 1/fs)
+        t           = np.linspace(0, dur_total, int(fs*dur_total), endpoint=False)
         env         = np.sin(np.pi * t / dur_total)  # 0➜1➜0 half-cos envelope
 
         target_rms  = pref * 10**(spl_broad/20)      # Pa

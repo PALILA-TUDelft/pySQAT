@@ -1,0 +1,254 @@
+
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@   PERFORMANCE REPORT v1   @@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+
+The following report contains data on the perfromance of the code
+when processing the validation signals. The best time from 5 runs is reported.
+
+***********************
+** Loudness_ISO532_1 **
+***********************
+
+Sampling Frequency (fs): 48 kHz
+Duration (d): 5 s
+Tone (f_tone): 1 kHz
+SPL (desired_spl): 40 dB SPL
+
+> free-field, time-varying, no skip
+    
+    Timing
+    ---------------
+    6.870 s
+
+*********************
+** EPNL_FAR_Part36 **
+*********************
+
+Sampling Frequency (fs): 48 kHz
+Duration (dur_total): 20 s
+Tone (tone_freq): 800 Hz
+SPL Broadband Peak (spl_broad): 90 dB SPL
+Full-SCale SPL (dBFS) = 94 db SPL
+Half-cos Envelope for WHite Noise
+
+> Waveform Mode, dt 0.5, 10 dB threshold
+    
+    Timing
+    ---------------
+    6.893 s
+
+************************
+** Sharpness_DIN45692 **
+************************
+
+Narrowband Noise (bw): 160 Hz
+Sampling Frequency (fs): 48 kHz
+Duration (d): 5 s
+Carrier Frequency (fc): 1 kHz
+SPL (Lp_dB): 60 dB SPL
+
+> DIN45692, free-field, time-varying, skip 0.5
+
+    Timing
+    ---------------
+    6.836 s
+
+> bismarck, free-field, time-varying, skip 0.5
+
+    Timing
+    ---------------
+    6.834 s
+
+> aures, free-field, time-varying, skip 0.5
+
+    Timing
+    ---------------
+    6.849 s
+
+
+**************************
+** Roughness_Daniel1997 **
+**************************
+
+Amplitude Modulation
+Sampling Rate (fs): 48 kHz
+Duration (d): 5 s
+Modulation Frequency (f_mod): 70 Hz
+Modulation Depth (md): 1
+Carrier Frequency (f_carrier): 1 kHz
+SPL (L): 60 dB SPL
+
+> no time skip
+
+    Timing
+    ---------------
+    0.618 s
+
+***********************************
+** FluctuationStrength_Osses2016 **
+***********************************
+
+Amplitude Modulation
+Sampling Rate (fs): 48 kHz
+Duration (d): 5 s
+Modulation Frequency (f_mod): 4 Hz
+Modulation Depth (md): 1
+Carrier Frequency (f_carrier): 1 kHz
+SPL (L): 60 dB SPL
+
+> time-varying, skip 2.0
+
+    Timing
+    ---------------
+    5.094 s
+
+************************
+** Tonality_Aures1985 **
+************************
+
+Sampling Frequency (fs): 48 kHz
+Duration (d): 5 s
+Tone (f_tone): 1 kHz
+SPL (desired_spl): 60 dB SPL
+
+> free-field, skip 0.5
+
+    Timing
+    ---------------
+    0.514 s
+
+*****************************************
+** PsychoacousticAnnoyance_Zwicker1999 **
+*****************************************
+
+Sampling Frequency (fs): 48 kHz
+Duration (d): 5 s
+Carrier Frequency (carrier_freq): 1 kHz
+
+[For all: free-field, skip 0.5]
+> Pure Sine (A = 0.1)
+
+    Timing
+    ---------------
+    13.538 s
+
+> AM (A = 0.1, fmod = 4 Hz, md = 1)
+
+    Timing
+    ---------------
+    13.087 s
+
+> FM (A = 0.1, fmod = 70 Hz, dev = 100 Hz, md = 1)
+
+    Timing
+    ---------------
+    13.735 s
+
+> Gaussian Noise (A = 0.1)
+
+    Timing
+    ---------------
+    35.582 s
+
+> Short Pure Sine (A = 0.1, d = 1.5 s)
+
+    Timing
+    ---------------
+    2.710 s
+
+> Percentiles (all 1)
+
+    Timing
+    ---------------
+    0.000 s
+
+************************************
+** PsychoacousticAnnoyance_Di2016 **
+************************************
+
+Sampling Frequency (fs): 48 kHz
+Duration (d): 5 s
+Carrier Frequency (carrier_freq): 1 kHz
+
+[For all: free-field, skip 0.5]
+> Pure Sine (A = 0.1)
+
+    Timing
+    ---------------
+    12.898 s
+
+> AM (A = 0.1, fmod = 4 Hz, md = 1)
+
+    Timing
+    ---------------
+    12.798 s
+
+> FM (A = 0.1, fmod = 70 Hz, dev = 100 Hz, md = 1)
+
+    Timing
+    ---------------
+    13.306 s
+
+> Gaussian Noise (A = 0.1)
+
+    Timing
+    ---------------
+    35.296 s
+
+> Short Pure Sine (A = 0.1, d = 1.5 s)
+
+    Timing
+    ---------------
+    2.559 s
+
+> Percentiles (all 1)
+
+    Timing
+    ---------------
+    0.000 s
+
+**************************************
+** PsychoacousticAnnoyance_More2010 **
+**************************************
+
+Sampling Frequency (fs): 48 kHz
+Duration (d): 5 s
+Carrier Frequency (carrier_freq): 1 kHz
+
+[For all: free-field, skip 0.5]
+> Pure Sine (A = 0.1)
+
+    Timing
+    ---------------
+    13.949 s
+
+> AM (A = 0.1, fmod = 4 Hz, md = 1)
+
+    Timing
+    ---------------
+    13.638 s
+
+> FM (A = 0.1, fmod = 70 Hz, dev = 100 Hz, md = 1)
+
+    Timing
+    ---------------
+    14.100 s
+
+> Gaussian Noise (A = 0.1)
+
+    Timing
+    ---------------
+    35.701 s
+
+> Short Pure Sine (A = 0.1, d = 1.5 s)
+
+    Timing
+    ---------------
+    2.733 s
+
+> Percentiles (all 1)
+
+    Timing
+    ---------------
+    0.000 s
