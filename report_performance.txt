@@ -17,9 +17,13 @@ SPL (desired_spl): 40 dB SPL
 
 > free-field, time-varying, no skip
     
-    Timing
+    Original
     ---------------
     6.870 s
+
+    Optimized
+    ---------------
+    1.966 s
 
 *********************
 ** EPNL_FAR_Part36 **

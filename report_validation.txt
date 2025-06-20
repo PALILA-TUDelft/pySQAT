@@ -1,7 +1,7 @@
 
-@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-@@@@   SOFT VALIDATION REPORT v1   @@@@
-@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@   SOFT VALIDATION REPORT v1.1   @@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 
 The following report contains data on several validation signals.
 Except for Psychoacoustic Annoyance, all other metrics should result in 1.
@@ -21,16 +21,16 @@ SPL (desired_spl): 40 dB SPL
     Mean Loudness
     ---------------
     MATLAB: 0.99 sone
-    PYTHON: 0.99 sone
+    PYTHON: 1.00 sone
 
-    Error: -0.00 %
+    Error: +1.00 %
 
     Mean Loudness  Level
     ---------------
     MATLAB: 39.84 phon
-    PYTHON: 39.91 phon
+    PYTHON: 39.99 phon
 
-    Error: -0.18 %
+    Error: -0.38 %
 
 ************************
 ** Sharpness_DIN45692 **

@@ -14,12 +14,14 @@ import timeit
 
 from sound_metrics import *
 from utilities import *
-from metrics_loudness import Loudness_ISO532_1, EPNL_FAR_Part36
+from metrics_loudness import EPNL_FAR_Part36 #, Loudness_ISO532_1
 from metrics_sharpness import Sharpness_DIN45692
 from metrics_roughness import Roughness_Daniel1997
 from metrics_fluctuation import FluctuationStrength_Osses2016
 from metrics_tonality import Tonality_Aures1985
 from metrics_annoyance import PsychoacousticAnnoyance_Di2016, PsychoacousticAnnoyance_Zwicker1999, PsychoacousticAnnoyance_More2010
+
+from test_stuff import Loudness_ISO532_1
 
 def check_LOUDNESS_1():
 
@@ -46,6 +48,7 @@ def check_LOUDNESS_1():
             show=False           # draw summary plots
         )
 
+        print(f"Overall loudness (median of time-series): {np.median(OUT['InstantaneousLoudness']):.2f} sone")
         print(f"Loudness level (median):   {np.median(OUT['InstantaneousLoudnessLevel']):.2f} phon")
 
 def check_LOUDNESS_2():
