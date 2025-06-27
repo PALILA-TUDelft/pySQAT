@@ -863,10 +863,6 @@ def EPNL_FAR_Part36(insig=None, fs=None, method=None, dt=None, threshold=None, s
     # Handle input arguments similar to MATLAB's nargin
     num_args = sum(x is not None for x in [insig, fs, method, dt, threshold, show])
 
-    if num_args == 0 or insig is None or fs is None:
-        print(EPNL_FAR_Part36.__doc__)
-        return
-
     # Set defaults for missing parameters in one consolidated block
     if dt is None:
         dt = 0.5
@@ -1037,7 +1033,7 @@ def EPNL_FAR_Part36(insig=None, fs=None, method=None, dt=None, threshold=None, s
             plt.title('Instantaneous overall SPL (1/3 oct. bands)')
 
             # plot spectrogram (1/3 octave bands in dt time steps)
-            ax2 = plt.subplot(2, 6, (3, 4, 5, 6))
+            ax2 = plt.subplot2grid((2, 6), (0, 2), colspan=4)  # Spans columns 3 to 6 in the first row
             fnom = fc_TOB / 1000  # convert center freq to kHz to plot 
             xx, yy = np.meshgrid(time, fnom)
             pcm = plt.pcolormesh(xx, yy, SPL_TOB_spectra.T, shading='auto')

@@ -1,0 +1,66 @@
+from __future__ import annotations
+from typing import Dict, Any, Tuple
+
+from sound_metrics import *
+from utilities import *
+from metrics_loudness import Loudness_ISO532_1, EPNL_FAR_Part36
+from metrics_sharpness import Sharpness_DIN45692
+from metrics_roughness import Roughness_Daniel1997
+from metrics_fluctuation import FluctuationStrength_Osses2016
+from metrics_tonality import Tonality_Aures1985
+
+def ex_Loudness_ISO532_1():
+
+    L_stationary = Loudness_ISO532_1(insig = "sound_files\RefSignal_Loudness_ISO532_1.wav",
+                                         field = 0,   # field; free field = 0; diffuse field = 1;
+                                         method = 1,  # method; stationary (from input 1/3 octave unweighted SPL)=0; stationary = 1; time varying = 2; 
+                                         time_skip = 0.5, # time_skip, in seconds for level (stationary signals) and statistics (stationary and time-varying signals) calculations
+                                         show = 1);     # show results, 'false' (disable, default value) or 'true' (enable)
+
+    L_time_varying = Loudness_ISO532_1(insig = "sound_files\RefSignal_Loudness_ISO532_1.wav",
+                                         field = 0,   # field; free field = 0; diffuse field = 1;
+                                         method = 2,  # method; stationary (from input 1/3 octave unweighted SPL)=0; stationary = 1; time varying = 2; 
+                                         time_skip = 0.5, # time_skip, in seconds for level (stationary signals) and statistics (stationary and time-varying signals) calculations
+                                         show = 1);     # show results, 'false' (disable, default value) or 'true' (enable)
+
+    return L_stationary, L_time_varying
+
+def ex_EPNL_FAR_Part36():
+
+    soundfile = "sound_files\ExSignal_A320_auralized_departure_104dBFS.wav"
+    dBFS_soundfile = 104 # a priori knowledge
+
+    raw_insig, fs = wav2sig(soundfile, dBFS=dBFS_soundfile)
+    cal =  20E-6*10**(dBFS_soundfile/20) # calibration factor
+
+    insig = raw_insig * cal
+
+    EPNL_1 = EPNL_FAR_Part36(insig = insig,
+                             fs = fs, #input signal and sampling freq.
+                             method = 1, # method = 0, insig is a SPL[nTime,nFreq] matrix; method = 1, insig is a sound file
+                             dt = 0.5, # time-step in which the third-octave SPLs are averaged, in seconds.
+                             threshold = 10, # threshold value used to calculate the PNLT decay from PNLTM during the calculation of the duration correction
+                             show = 1)
+    
+    input = EPNL_1['SPL_TOB_spectra']
+    
+    EPNL_2 = EPNL_FAR_Part36(insig = input,
+                             method = 0,  # method = 0, insig is a SPL[nTime,nFreq] matrix; method = 1, insig is a sound file
+                             dt = 0.5,  # time-step in which the third-octave SPLs are averaged, in seconds.
+                             threshold = 10,  # threshold value used to calculate the PNLT decay from PNLTM during the calculation of the duration correction
+                             show = 1)  # show results, 'false' (disable, default value) or 'true' (enable)
+
+    return EPNL_1, EPNL_2
+
+example = "EPNL_FAR_Part36"
+
+if __name__ == "__main__":
+
+    if example == "Loudness_ISO532_1":
+
+        L1, L2 = ex_Loudness_ISO532_1()
+
+    elif example == "EPNL_FAR_Part36":
+
+        E1, E2 = ex_EPNL_FAR_Part36()
+
