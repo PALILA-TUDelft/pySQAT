@@ -52,7 +52,40 @@ def ex_EPNL_FAR_Part36():
 
     return EPNL_1, EPNL_2
 
-example = "EPNL_FAR_Part36"
+def ex_Sharpness_DIN45692():
+
+    soundfile = "sound_files\RefSignal_Sharpness_DIN45692.wav"
+    raw_insig, fs = wav2sig(soundfile)
+
+    lvl_cal_signal = 60
+    sig_rms = np.sqrt(np.sum(raw_insig**2)/len(raw_insig))
+
+    dBFS_in = lvl_cal_signal-20*np.log10(sig_rms) # difference between target and actual full-scale value
+    dBFS_out = 94 # dB full scale convention in SQAT: amplitude of 1 = 1 Pa, or 94 dB SPL
+    dB_correction = dBFS_in - dBFS_out
+
+    insig_cal = raw_insig * 10**(dB_correction/20)
+
+    S_stationary = Sharpness_DIN45692(insig = insig_cal, # input signal, 1D array
+                                      fs = fs, # input signal and sampling frequency
+                                      weight_type = 'DIN45692', # Weight_Type, type of weighting function used for sharpness calculation
+                                      LoudnessField = 0, # field used for loudness calculation; free field = 0; diffuse field = 1;
+                                      LoudnessMethod = 1, # method used for loudness calculation: stationary (from input 1/3 octave unweighted SPL)=0; stationary = 1; time varying = 2;     
+                                      time_skip = 0, # time_skip (second) for statistics calculation
+                                      show_sharpness = 0, # show sharpness results
+                                      show_loudness = 0) # show loudness results
+
+    
+    print(f"Calculated Stationary Sharpness: {S_stationary['Sharpness']:.3f} acum")
+
+    return S_stationary
+
+
+
+
+
+
+example = "Sharpness_DIN45692"
 
 if __name__ == "__main__":
 
@@ -63,4 +96,8 @@ if __name__ == "__main__":
     elif example == "EPNL_FAR_Part36":
 
         E1, E2 = ex_EPNL_FAR_Part36()
+
+    elif example == "Sharpness_DIN45692":
+
+        S1 = ex_Sharpness_DIN45692()
 
