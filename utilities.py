@@ -27,6 +27,20 @@ ArrayLike = Union[np.ndarray, float, int]
 #### MAIN FUNCTIONS ####
 # ----------------------
 
+def acquire(variable, name):
+        if len(variable) > 1:
+            if (np.iscomplex(variable[0]) or np.iscomplex(variable[-1]) or np.iscomplex(variable[len(variable)//3])) == True:
+                df = pd.DataFrame({
+                    f'{name} (Real)':  np.real(variable).ravel(),
+                    f'{name} (Imag)':  np.imag(variable).ravel()
+                })
+                df.to_excel(f'{name}_complex.xlsx', index=False)
+            else:
+                df = pd.DataFrame({
+                    f'{name}':  variable.ravel()
+                })
+                df.to_excel(f'{name}.xlsx', index=False)
+
 def see(file_path: str) -> None:
     """
     Visualize the waveform and log-frequency spectrogram of a WAV file.

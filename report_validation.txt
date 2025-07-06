@@ -56,7 +56,7 @@ SPL (Lp_dB): 60 dB SPL
     Mean Sharpness
     ---------------
     MATLAB: 1.022 acum
-    PYTHON: 1.021 acum
+    PYTHON: 1.021 acum 
 
     Difference: -0.98 %
 

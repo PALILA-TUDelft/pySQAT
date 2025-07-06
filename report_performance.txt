@@ -1,7 +1,7 @@
 
-@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-@@@@   PERFORMANCE REPORT v1   @@@@
-@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@   PERFORMANCE REPORT v2.0   @@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 
 The following report contains data on the perfromance of the code
 when processing the validation signals. The best time from 5 runs is reported.
@@ -17,13 +17,13 @@ SPL (desired_spl): 40 dB SPL
 
 > free-field, time-varying, no skip
     
-    Original
+    Python
     ---------------
-    6.870 s
+    1.909 s  (Unoptimised: 6.870 s)
 
-    Optimized
+    MATLAB
     ---------------
-    1.909 s
+    4.463 s
 
 *********************
 ** EPNL_FAR_Part36 **
@@ -38,13 +38,13 @@ Half-cos Envelope for WHite Noise
 
 > Waveform Mode, dt 0.5, 10 dB threshold
     
-    Original
+    Python
     ---------------
-    0.723 s
+    0.634 s (Unoptimised: 0.723 s)
 
-    Optimized
+    MATLAB
     ---------------
-    0.634 s
+    0.582 s
 
 ************************
 ** Sharpness_DIN45692 **
@@ -58,33 +58,35 @@ SPL (Lp_dB): 60 dB SPL
 
 > DIN45692, free-field, time-varying, skip 0.5
 
-    Original
+    Python
     ---------------
-    6.836 s
+    2.067 s (Unoptimised: 6.836 s)
 
-    Optimized
+    MATLAB
     ---------------
-    2.067 s
+    4.619 s
 
 > bismarck, free-field, time-varying, skip 0.5
 
-    Original
+    Python
     ---------------
-    6.834 s
+    2.070 s (Unoptimised: 6.834 s)
 
-    Optimized
+    MATLAB
     ---------------
-    2.070 s
+    4.735 s
+
 
 > aures, free-field, time-varying, skip 0.5
 
-    Original
+    Python
     ---------------
-    6.849 s
+    2.077 s (Unoptimised: 6.849 s)
 
-    Optimized
+    MATLAB
     ---------------
-    2.077 s
+    4.852
+
 
 
 **************************
@@ -101,13 +103,14 @@ SPL (L): 60 dB SPL
 
 > no time skip
 
-    Original
+    Python
     ---------------
-    0.618 s
+    0.629 s (Unoptimised: 0.618 s)
 
-    Optimised
+    MATLAB
     ---------------
-    0.629 s
+    0.982 s
+
 
 ***********************************
 ** FluctuationStrength_Osses2016 **
@@ -123,9 +126,14 @@ SPL (L): 60 dB SPL
 
 > time-varying, skip 2.0
 
-    Timing
+    Python
     ---------------
-    5.094 s
+    5.248 s
+
+    MATLAB
+    ---------------
+    3.174 s
+
 
 ************************
 ** Tonality_Aures1985 **
@@ -138,9 +146,13 @@ SPL (desired_spl): 60 dB SPL
 
 > free-field, skip 0.5
 
-    Timing
+    Python
     ---------------
     0.514 s
+
+    MATLAB
+    ---------------
+    0.915 s
 
 *****************************************
 ** PsychoacousticAnnoyance_Zwicker1999 **
@@ -153,37 +165,61 @@ Carrier Frequency (carrier_freq): 1 kHz
 [For all: free-field, skip 0.5]
 > Pure Sine (A = 0.1)
 
-    Timing
+    Python
     ---------------
     13.538 s
 
+    MATLAB
+    ---------------
+    4.674 s
+
 > AM (A = 0.1, fmod = 4 Hz, md = 1)
 
-    Timing
+    Python
     ---------------
     13.087 s
 
+    MATLAB
+    ---------------
+    4.622 s
+
 > FM (A = 0.1, fmod = 70 Hz, dev = 100 Hz, md = 1)
 
-    Timing
+    Python
     ---------------
     13.735 s
 
+    MATLAB
+    ---------------
+    4.927 s
+
 > Gaussian Noise (A = 0.1)
 
-    Timing
+    Python
     ---------------
     35.582 s
 
+    MATLAB
+    ---------------
+    15.903 s
+
 > Short Pure Sine (A = 0.1, d = 1.5 s)
 
-    Timing
+    Python
     ---------------
     2.710 s
 
+    MATLAB
+    ---------------
+    1.951 s
+
 > Percentiles (all 1)
 
-    Timing
+    Python
+    ---------------
+    0.000 s
+
+    MATLAB
     ---------------
     0.000 s
 
@@ -198,38 +234,63 @@ Carrier Frequency (carrier_freq): 1 kHz
 [For all: free-field, skip 0.5]
 > Pure Sine (A = 0.1)
 
-    Timing
+    Python
     ---------------
     12.898 s
 
+    MATLAB
+    --------------
+    11.198 s
+
 > AM (A = 0.1, fmod = 4 Hz, md = 1)
 
-    Timing
+    Python
     ---------------
     12.798 s
 
+    MATLAB
+    --------------
+    11.378 s
+
 > FM (A = 0.1, fmod = 70 Hz, dev = 100 Hz, md = 1)
 
-    Timing
+    Python
     ---------------
     13.306 s
 
+    MATLAB
+    --------------
+    12.366 s
+
 > Gaussian Noise (A = 0.1)
 
-    Timing
+    Python
     ---------------
     35.296 s
 
+    MATLAB
+    --------------
+    40.743 s
+
+
 > Short Pure Sine (A = 0.1, d = 1.5 s)
 
-    Timing
+    Python
     ---------------
     2.559 s
 
+    MATLAB
+    --------------
+    2.664 s
+
 > Percentiles (all 1)
 
-    Timing
+    Python
     ---------------
+    0.000 s
+
+    MATLAB
+    --------------
     0.000 s
 
 **************************************
@@ -243,36 +304,61 @@ Carrier Frequency (carrier_freq): 1 kHz
 [For all: free-field, skip 0.5]
 > Pure Sine (A = 0.1)
 
-    Timing
+    Python
     ---------------
     13.949 s
 
+    MATLAB
+    --------------
+    11.842 s
+
 > AM (A = 0.1, fmod = 4 Hz, md = 1)
 
-    Timing
+    Python
     ---------------
     13.638 s
 
+    MATLAB
+    --------------
+    12.054 s
+
+
 > FM (A = 0.1, fmod = 70 Hz, dev = 100 Hz, md = 1)
 
-    Timing
+    Python
     ---------------
     14.100 s
 
+    MATLAB
+    --------------
+    12.046 s
+
 > Gaussian Noise (A = 0.1)
 
-    Timing
+    Python
     ---------------
     35.701 s
 
+    MATLAB
+    --------------
+    40.530 s
+
 > Short Pure Sine (A = 0.1, d = 1.5 s)
 
-    Timing
+    Python
     ---------------
     2.733 s
 
+    MATLAB
+    --------------
+    2.578 s
+
 > Percentiles (all 1)
 
-    Timing
+    Python
     ---------------
+    0.000 s
+
+    MATLAB
+    --------------
     0.000 s

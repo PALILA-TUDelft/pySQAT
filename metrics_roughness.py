@@ -9,6 +9,7 @@ from scipy.interpolate import interp1d
 from scipy.fft import fft, ifft
 from scipy.signal.windows import hann, blackman
 from matplotlib import pyplot as plt
+import csv
 
 from sound_metrics import *
 from utilities import *
@@ -186,7 +187,7 @@ def Roughness_Daniel1997(insig=None, fs=None, time_skip=None, show=None, dBFS=94
     
     # zb contains 0-based indices relative to N0
     zb = np.sort(np.concatenate([Bf[0, :], Cf[0, :]])).astype(int)
-    MinBf = MinExcdB[zb] # This assumes zb are valid indices into MinExcdB
+    MinBf = MinExcdB[zb].astype(float) # This assumes zb are valid indices into MinExcdB
     
     # ExcAmp and Fei are sized for the full frequency spectrum (N2)
     ei = np.zeros((47, N))
@@ -199,8 +200,9 @@ def Roughness_Daniel1997(insig=None, fs=None, time_skip=None, show=None, dBFS=94
     
     gzi = np.zeros(47)
     h0 = np.zeros(47)
-    k_gzi = np.arange(47)
-    gzi = np.sqrt(np.interp(k_gzi/2, gr[0, :], gr[1, :], left=0, right=0)) # Add left/right for interp
+    k_gzi = np.arange(1,48)
+    f = interp1d(gr[0, :], gr[1, :], kind='cubic', bounds_error=False, fill_value=np.nan)
+    gzi[k_gzi-1] = np.sqrt(f(k_gzi/2))# Add left/right for interp
     
     # calculate a0
     a0tab = np.array([
@@ -302,7 +304,7 @@ def Roughness_Daniel1997(insig=None, fs=None, time_skip=None, show=None, dBFS=94
     Chno = 47  # number of channels
     Cal = 0.50  # calibration factor, twice the old value (0.25)
     qb_indices_0based = np.arange(N0-1, Ntop)  # 0-based indices for relevant frequencies
-    freqs = (qb_indices_0based + 1) * fs / N # Frequencies corresponding to these indices
+    freqs = (qb_indices_0based + 2) * fs / N # Frequencies corresponding to these indices
     hBPi = np.zeros((Chno, N))
     hBPrms = np.zeros(Chno)
     mdept = np.zeros(Chno)
@@ -323,15 +325,21 @@ def Roughness_Daniel1997(insig=None, fs=None, time_skip=None, show=None, dBFS=94
         
         # Calculate Excitation Patterns
         TempIn = dataIn * AmpCal
-        
+        # acquire(TempIn,'TempIn') # Differs with MATLAB by onli -0.0104 %
+
         # Ensure TempIn is 1D for FFT
         if TempIn.ndim > 1:
             TempIn = TempIn.flatten()
-        
+    
         TempIn_fft = a0 * fft(TempIn) # Use a new variable for FFT result
+        
+        # acquire(TempIn_fft,'TempIn_fft') # ISSUE IS FFT. Error between -68374% and 100% in magnitude (68474% error bandwidth)
+        # Python might actually be the one that is more accurate. See: https://stackoverflow.com/questions/70177797/why-is-the-result-of-numpy-fft-different-from-matlab-fft
+        
         Lg = np.abs(TempIn_fft[qb_indices_0based])  # get absolute value of fourier transform for indices in range of human hearing
         LdB = 20 * np.log10(Lg)  # mag2db equivalent
-        
+        # acquire(LdB,'LdB') # SHOWS error between -41% and 19% (60% error bandwidth)
+
         # whichL contains 0-based relative indices into LdB (and Lg)
         whichL = np.where(LdB > MinExcdB)[0]  
         sizL = len(whichL)  # get number of frequencies where this holds

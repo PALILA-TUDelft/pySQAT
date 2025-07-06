@@ -21,8 +21,6 @@ from metrics_fluctuation import FluctuationStrength_Osses2016
 from metrics_tonality import Tonality_Aures1985
 from metrics_annoyance import PsychoacousticAnnoyance_Di2016, PsychoacousticAnnoyance_Zwicker1999, PsychoacousticAnnoyance_More2010
 
-from test_optimisations import Roughness_Daniel1997
-
 def check_LOUDNESS_1():
 
         fs = 48_000                      # sampling rate expected by the OB-filter bank
@@ -285,7 +283,7 @@ def check_PA_1():
 
 def check_PA_2():
       
-        type_wave = 4 # 0 = pure, 1 = AM, 2 = FM, 3 = noise, 4 = short, 5 = percentiles
+        type_wave = 1 # 0 = pure, 1 = AM, 2 = FM, 3 = noise, 4 = short, 5 = percentiles
 
         if type_wave == 0: # Pure Sine Wave
             fs = 48000
@@ -447,7 +445,7 @@ def check_PA_3():
             print(f"Calculated Psychoacoustic Annoyance (from percentiles): {PA_percentile.item():.4f}")
 
 
-check_which = 3
+check_which = 6.2
 
 if __name__ == "__main__":
 
