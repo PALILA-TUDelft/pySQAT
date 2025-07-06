@@ -56,6 +56,7 @@ def ex_Sharpness_DIN45692():
 
     soundfile = "sound_files\RefSignal_Sharpness_DIN45692.wav"
     raw_insig, fs = wav2sig(soundfile)
+    time = len(raw_insig)/fs
 
     lvl_cal_signal = 60
     sig_rms = np.sqrt(np.sum(raw_insig**2)/len(raw_insig))
@@ -74,15 +75,44 @@ def ex_Sharpness_DIN45692():
                                       time_skip = 0, # time_skip (second) for statistics calculation
                                       show_sharpness = 0, # show sharpness results
                                       show_loudness = 0) # show loudness results
+    
+    L = Loudness_ISO532_1(insig = insig_cal, # input signal, 1D array
+                          fs = fs,
+                          field = 0,
+                          method = 1,
+                          time_skip = 0.5,
+                          show = 0)
+    
+    L2 = Loudness_ISO532_1(insig = insig_cal, # input signal, 1D array
+                          fs = fs,
+                          field = 0,
+                          method = 2,
+                          time_skip = 0.5,
+                          show = 0)
+
+    S_loudness_stat = Sharpness_DIN45692(SpecificLoudness = L['SpecificLoudness'],
+                                    fs = fs,
+                                    LoudnessMethod = 1,
+                                    time = time,
+                                    weight_type = 'DIN45692',
+                                    show_sharpness = 0,
+                                    show_loudness = 0)
+    
+    
+    S_loudness_time = Sharpness_DIN45692(SpecificLoudness = L2['InstantaneousSpecificLoudness'],
+                                    weight_type = 'DIN45692',
+                                    time = L2['time'],
+                                    time_skip = 0.5,
+                                    LoudnessMethod = 2,
+                                    show_sharpness = 0,
+                                    show_loudness = 0)
 
     
     print(f"Calculated Stationary Sharpness: {S_stationary['Sharpness']:.3f} acum")
+    print(f"Calculated Stationary Sharpness from Loudness (stationary): {S_loudness_stat['Sharpness']:.3f} acum")
+    print(f"Calculated Stationary Sharpness from Loudness (varying): {S_loudness_time['Smean'][0]:.3f} acum")
 
-    return S_stationary
-
-
-
-
+    return S_stationary, S_loudness_stat, S_loudness_time
 
 
 example = "Sharpness_DIN45692"
@@ -99,5 +129,6 @@ if __name__ == "__main__":
 
     elif example == "Sharpness_DIN45692":
 
-        S1 = ex_Sharpness_DIN45692()
+        S1, S2, S3 = ex_Sharpness_DIN45692()
+
 

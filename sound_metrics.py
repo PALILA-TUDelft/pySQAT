@@ -94,7 +94,6 @@ def ob13_iso532_1(insig, fs, fmin=None, fmax=None):
     
     # Ensure insig is 1D for consistent filtering operations
     insig = insig.squeeze()
-
     len_sig = insig.shape[0]
 
     # Create filter bank and filter the signal

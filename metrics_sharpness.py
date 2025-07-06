@@ -132,6 +132,8 @@ def Sharpness_DIN45692(insig=None, fs=None, weight_type=None, LoudnessField=None
             SpecificLoudness = L['SpecificLoudness']
             loudness_sones = np.sum(L['SpecificLoudness']) * 0.10
 
+            z = np.linspace(0.1, 24, n)  # create bark axis
+
         elif LoudnessMethod == 2:  # time-varying loudness calculation
             
             L = Loudness_ISO532_1(insig, fs,          # input signal and sampling freq.
@@ -147,7 +149,28 @@ def Sharpness_DIN45692(insig=None, fs=None, weight_type=None, LoudnessField=None
             for i in range(L['InstantaneousSpecificLoudness'].shape[0]):
                 loudness_sones[i] = np.sum(L['InstantaneousSpecificLoudness'][i, :]) * 0.10
 
-    z = np.linspace(0.1, 24, n)  # create bark axis
+            z = np.linspace(0.1, 24, n)  # create bark axis
+    
+    else: # Handle mode 2: From specific loudness
+
+        if LoudnessMethod == 1:  # stationary loudness calculation
+            
+            n = SpecificLoudness.shape[0]
+            SpecificLoudness = SpecificLoudness
+            loudness_sones = np.sum(SpecificLoudness) * 0.10
+
+            z = np.linspace(0.1, 24, n)  # create bark axis
+
+        elif LoudnessMethod == 2:  # time-varying loudness calculation
+            
+            n = SpecificLoudness.shape[1]
+            loudness_sones = np.zeros((SpecificLoudness.shape[0], 1))  # pre allocate memory
+            SpecificLoudness = SpecificLoudness
+            
+            for i in range(SpecificLoudness.shape[0]):
+                loudness_sones[i] = np.sum(SpecificLoudness[i, :]) * 0.10
+
+            z = np.linspace(0.1, 24, n)  # create bark axis
 
     ## Sharpness calculation ##########################################################
 
@@ -192,7 +215,7 @@ def Sharpness_DIN45692(insig=None, fs=None, weight_type=None, LoudnessField=None
         is_time_varying = (LoudnessMethod == 2)
         time_vector = L['time'] if LoudnessMethod == 2 else None
     else:
-        is_time_varying = (LoudnessMethod == 1)
+        is_time_varying = (LoudnessMethod == 2)
         time_vector = time
 
     if is_time_varying:  # (time-varying sharpness)
