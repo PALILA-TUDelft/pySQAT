@@ -160,14 +160,15 @@ def ex_Tonality_Aures1985():
 
     T = Tonality_Aures1985(insig = raw_insig, # input signal, 1D array
                            fs = fs, # input signal and sampling frequency
+                           LoudnessField= 0, # field used for loudness calculation; free field = 0; diffuse field = 1;
                            time_skip = 0, # time_skip (second) for statistics calculation
                            show = 1) # show results, 'false' (disable, default value) or 'true' (enable)
     
-    print(f"Calculated Tonality: {T['Tonality']:.3f} acum")
+    print(f"Calculated Tonality: {T['Kmean'][0]:.3f} t.u.")
     
     return T
 
-example = "FluctuationStrength_Osses2016"
+example = "Tonality_Aures1985"
 
 if __name__ == "__main__":
 
@@ -190,4 +191,8 @@ if __name__ == "__main__":
     elif example == "FluctuationStrength_Osses2016":
 
         F1, F2 = ex_FluctuationStrength_Osses2016()
+
+    elif example == "Tonality_Aures1985":
+
+        T = ex_Tonality_Aures1985()
 
