@@ -139,9 +139,33 @@ def ex_FluctuationStrength_Osses2016():
                                       time_skip = 0, # time_skip (second) for statistics calculation
                                       show = 1) # show results, 'false' (disable, default value) or 'true' (enable)
     
+    structIn = {"a0_type": "fastl2007"}
+
+    F2 = FluctuationStrength_Osses2016(insig = raw_insig, # input signal, 1D array
+                                      fs = fs, # input signal and sampling frequency
+                                      method = 1, # method; stationary (from input 1/3 octave unweighted SPL)=0; stationary = 1; time varying = 2;
+                                      time_skip = 0, # time_skip (second) for statistics calculation
+                                      show = 1,
+                                      struct_opt=structIn) # show results, 'false' (disable, default value) or 'true' (enable)
+
     print(f"Calculated Fluctuation Strength: {F['FSmean'][0]:.3f} acum")
+    print(f"Calculated Fluctuation Strength (a0): {F2['FSmean'][0]:.3f} acum")
     
-    return F
+    return F, F2
+
+def ex_Tonality_Aures1985():
+
+    soundfile = "sound_files\RefSignal_Tonality_Aures1985.wav"
+    raw_insig, fs = wav2sig(soundfile)
+
+    T = Tonality_Aures1985(insig = raw_insig, # input signal, 1D array
+                           fs = fs, # input signal and sampling frequency
+                           time_skip = 0, # time_skip (second) for statistics calculation
+                           show = 1) # show results, 'false' (disable, default value) or 'true' (enable)
+    
+    print(f"Calculated Tonality: {T['Tonality']:.3f} acum")
+    
+    return T
 
 example = "FluctuationStrength_Osses2016"
 
@@ -165,5 +189,5 @@ if __name__ == "__main__":
 
     elif example == "FluctuationStrength_Osses2016":
 
-        F = ex_FluctuationStrength_Osses2016()
+        F1, F2 = ex_FluctuationStrength_Osses2016()
 
