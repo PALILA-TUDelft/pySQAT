@@ -128,8 +128,22 @@ def ex_Roughness_Daniel1997():
     
     return R
 
+def ex_FluctuationStrength_Osses2016():
 
-example = "Roughness_Daniel1997"
+    soundfile = "sound_files\RefSignal_FluctuationStrength_Osses2016.wav"
+    raw_insig, fs = wav2sig(soundfile)
+
+    F = FluctuationStrength_Osses2016(insig = raw_insig, # input signal, 1D array
+                                      fs = fs, # input signal and sampling frequency
+                                      method = 1, # method; stationary (from input 1/3 octave unweighted SPL)=0; stationary = 1; time varying = 2;
+                                      time_skip = 0, # time_skip (second) for statistics calculation
+                                      show = 1) # show results, 'false' (disable, default value) or 'true' (enable)
+    
+    print(f"Calculated Fluctuation Strength: {F['FSmean'][0]:.3f} acum")
+    
+    return F
+
+example = "FluctuationStrength_Osses2016"
 
 if __name__ == "__main__":
 
@@ -148,4 +162,8 @@ if __name__ == "__main__":
     elif example == "Roughness_Daniel1997":
 
         R = ex_Roughness_Daniel1997()
+
+    elif example == "FluctuationStrength_Osses2016":
+
+        F = ex_FluctuationStrength_Osses2016()
 
