@@ -114,8 +114,22 @@ def ex_Sharpness_DIN45692():
 
     return S_stationary, S_loudness_stat, S_loudness_time
 
+def ex_Roughness_Daniel1997():
 
-example = "Sharpness_DIN45692"
+    soundfile = "sound_files\RefSignal_Roughness_Daniel1997.wav"
+    raw_insig, fs = wav2sig(soundfile)
+
+    R = Roughness_Daniel1997(insig = raw_insig, # input signal, 1D array
+                                fs = fs, # input signal and sampling frequency
+                                time_skip = 0, # time_skip (second) for statistics calculation
+                                show = 1) # show results, 'false' (disable, default value) or 'true' (enable)
+    
+    print(f"Calculated Roughness: {R['Rmean'][0]:.3f} acum")
+    
+    return R
+
+
+example = "Roughness_Daniel1997"
 
 if __name__ == "__main__":
 
@@ -131,4 +145,7 @@ if __name__ == "__main__":
 
         S1, S2, S3 = ex_Sharpness_DIN45692()
 
+    elif example == "Roughness_Daniel1997":
+
+        R = ex_Roughness_Daniel1997()
 
