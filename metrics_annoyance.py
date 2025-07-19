@@ -1167,16 +1167,15 @@ def il_plotter(time, Instantaneous, percentile, variable, ax):
     ax.grid(False)
     ax.set_facecolor('white')
 
-check_which = 1
+check_which = 3
+with_wavfile = 0 # 0 = no wavfile, 1 = wavfile
+type_wave = 1 # 0 = pure, 1 = AM, 2 = FM, 3 = noise, 4 = short, 5 = percentiles
 
 if __name__ == "__main__":
     if check_which == 0: # NO TEST
         print("metrics_annoyance.py")
     
     elif check_which == 1: # PsychoacousticAnnoyance_Di2016
-
-        with_wavfile = 0 # 0 = no wavfile, 1 = wavfile
-        type_wave = 5 # 0 = pure, 1 = AM, 2 = FM, 3 = noise, 4 = short, 5 = percentiles
 
         if type_wave == 0: # Pure Sine Wave
             fs = 48000
@@ -1258,9 +1257,6 @@ if __name__ == "__main__":
 
     elif check_which == 2: # PsychoacousticAnnoyance_Zwicker1999
 
-        with_wavfile = 0 # 0 = no wavfile, 1 = wavfile
-        type_wave = 5 # 0 = pure, 1 = AM, 2 = FM, 3 = noise, 4 = short, 5 = percentiles
-
         if type_wave == 0: # Pure Sine Wave
             fs = 48000
             duration = 5.0
@@ -1339,9 +1335,6 @@ if __name__ == "__main__":
             print(f"Calculated Psychoacoustic Annoyance (from percentiles): {PA_percentile.item():.4f}")
 
     elif check_which == 3: # PsychoacousticAnnoyance_More2010
-
-        with_wavfile = 0 # 0 = no wavfile, 1 = wavfile
-        type_wave = 5 # 0 = pure, 1 = AM, 2 = FM, 3 = noise, 4 = short, 5 = percentiles
 
         if type_wave == 0: # Pure Sine Wave
             fs = 48000

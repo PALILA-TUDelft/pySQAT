@@ -302,7 +302,7 @@ def Roughness_Daniel1997(insig=None, fs=None, time_skip=None, show=None, dBFS=94
     AmpCal = 10**(91.2/20) * 2 / (N * np.mean(blackman(N)))
     
     Chno = 47  # number of channels
-    Cal = 0.50  # calibration factor, twice the old value (0.25)
+    Cal = 0.50 # calibration factor, twice the old value (0.25)
     qb_indices_0based = np.arange(N0-1, Ntop)  # 0-based indices for relevant frequencies
     freqs = (qb_indices_0based + 2) * fs / N # Frequencies corresponding to these indices
     hBPi = np.zeros((Chno, N))

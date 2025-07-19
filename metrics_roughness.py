@@ -4,10 +4,10 @@ from typing import Dict, Any, Tuple
 import numpy as np
 from numpy.typing import NDArray
 from scipy.io import wavfile
-from scipy.signal import resample_poly, resample
+from scipy.signal import resample
 from scipy.interpolate import interp1d 
 from scipy.fft import fft, ifft
-from scipy.signal.windows import hann, blackman
+from scipy.signal.windows import blackman
 from matplotlib import pyplot as plt
 import csv
 
@@ -20,10 +20,6 @@ FloatArray = NDArray[np.floating]
 # -------------------------
 #### ROUGHNESS METRICS ####
 # -------------------------
-
-def mag2db(mag_val):
-    """Convert magnitude to dB."""
-    return 20 * np.log10(np.maximum(mag_val, np.finfo(float).eps))
 
 def Roughness_Daniel1997(insig: ArrayLike, fs: int, time_skip: float = 0, show: bool = False, dBFS = 94) -> Dict[str, NDArray]:
     """
