@@ -8,6 +8,7 @@ from metrics_sharpness import Sharpness_DIN45692
 from metrics_roughness import Roughness_Daniel1997
 from metrics_fluctuation import FluctuationStrength_Osses2016
 from metrics_tonality import Tonality_Aures1985
+from metrics_annoyance import PsychoacousticAnnoyance_Zwicker1999, PsychoacousticAnnoyance_More2010
 
 def ex_Loudness_ISO532_1():
 
@@ -168,7 +169,73 @@ def ex_Tonality_Aures1985():
     
     return T
 
-example = "Sharpness_DIN45692"
+def ex_PsychoacousticAnnoyance_Zwicker1999():
+
+    soundfile = "sound_files\RefSignal_Loudness_ISO532_1.wav"
+    raw_insig, fs = wav2sig(soundfile)
+    lvl_cal_signal = 40
+
+    insig_cal, cal_factor, dBFS_out = calibrate(raw_insig, raw_insig, lvl_cal_signal, return_dbfs=True)
+
+    lvl_rms = 20*np.log10(np.sqrt(np.mean(insig_cal*insig_cal))) + dBFS_out
+
+    print(f"\nThe RMS level of the calibrated input signal is {lvl_rms:.1f} dB SPL")
+    print(f"\n\t(full scale value = {dBFS_out:.0f} dB SPL)")
+
+    A1 = PsychoacousticAnnoyance_Zwicker1999(insig=insig_cal,
+                                            fs = fs,
+                                            LoudnessField = 0,
+                                            time_skip= 0.2,
+                                            showPA=True,
+                                            show=True)
+    
+    PA5 = A1['PA5'][0]
+
+    print(f"Calculated PA (Zwicker): {A1['PAmean'][0]:.3f} annoy")
+    
+    L_PA = A1['L']['N5'][0]; S_PA = A1['S']['S5'][0]; R_PA = A1['R']['R5'][0]; FS_PA = A1['FS']['FS5'][0]
+
+    A2 = PsychoacousticAnnoyance_Zwicker1999(percentiles = (L_PA, S_PA, R_PA, FS_PA))
+
+    print(f"Calculated PA5 from Loudness (Zwicker): {PA5:.3f} annoy")
+    print(f"Compare with: {PA5:.3f} annoy")
+
+    return A1, A2
+
+def ex_PsychoacousticAnnoyance_More2010():
+
+    soundfile = "sound_files\RefSignal_Loudness_ISO532_1.wav"
+    raw_insig, fs = wav2sig(soundfile)
+    lvl_cal_signal = 40
+
+    insig_cal, cal_factor, dBFS_out = calibrate(raw_insig, raw_insig, lvl_cal_signal, return_dbfs=True)
+
+    lvl_rms = 20*np.log10(np.sqrt(np.mean(insig_cal*insig_cal))) + dBFS_out
+
+    print(f"\nThe RMS level of the calibrated input signal is {lvl_rms:.1f} dB SPL")
+    print(f"\n\t(full scale value = {dBFS_out:.0f} dB SPL)")
+
+    A1 = PsychoacousticAnnoyance_More2010(insig=insig_cal,
+                                            fs = fs,
+                                            LoudnessField = 0,
+                                            time_skip= 0.2,
+                                            showPA=True,
+                                            show=True)
+    
+    PA5 = A1['PA5'][0]
+
+    print(f"Calculated PA (More): {A1['PAmean'][0]:.3f} annoy")
+    
+    L_PA = A1['L']['N5'][0]; S_PA = A1['S']['S5'][0]; R_PA = A1['R']['R5'][0]; FS_PA = A1['FS']['FS5'][0]; K_PA = A1['K']['K5'][0]
+
+    A2 = PsychoacousticAnnoyance_More2010(percentiles = (L_PA, S_PA, R_PA, FS_PA, K_PA))
+
+    print(f"Calculated PA5 from Loudness (More): {PA5:.3f} annoy")
+    print(f"Compare with: {PA5:.3f} annoy")
+
+    return A1, A2
+
+example = "PsychoacousticAnnoyance_More2010"
 
 if __name__ == "__main__":
 
@@ -196,3 +263,10 @@ if __name__ == "__main__":
 
         T = ex_Tonality_Aures1985()
 
+    elif example == "PsychoacousticAnnoyance_Zwicker1999":
+
+        A1, A2 = ex_PsychoacousticAnnoyance_Zwicker1999()
+
+    elif example == "PsychoacousticAnnoyance_More2010":
+
+        A1, A2 = ex_PsychoacousticAnnoyance_More2010()

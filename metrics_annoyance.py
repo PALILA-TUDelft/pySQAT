@@ -1167,9 +1167,9 @@ def il_plotter(time, Instantaneous, percentile, variable, ax):
     ax.grid(False)
     ax.set_facecolor('white')
 
-check_which = 2
+check_which = 3
 with_wavfile = 0 # 0 = no wavfile, 1 = wavfile
-type_wave = 5 # 0 = pure, 1 = AM, 2 = FM, 3 = noise, 4 = short, 5 = percentiles
+type_wave = 0 # 0 = pure, 1 = AM, 2 = FM, 3 = noise, 4 = short, 5 = percentiles
 
 if __name__ == "__main__":
     if check_which == 0: # NO TEST
