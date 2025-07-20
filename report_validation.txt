@@ -46,8 +46,8 @@ SPL (Lp_dB): 60 dB SPL
 
     Mean Sharpness
     ---------------
-    MATLAB: 1.019 acum
-    PYTHON: 1.020 acum
+    MATLAB: 1.020 acum
+    PYTHON: 1.021 acum
 
     Difference: +0.98 %
 
@@ -86,9 +86,10 @@ SPL (L): 60 dB SPL
     Mean Roughness
     ---------------
     MATLAB: 0.89 asper
-    PYTHON: 0.86 asper
+    PYTHON: 1.00 asper
 
-    Difference: +3.6 %
+    Difference: +11.5 %
+    (note that despite the difference, now Python is more accurate)
 
 ***********************************
 ** FluctuationStrength_Osses2016 **
@@ -143,55 +144,56 @@ Carrier Frequency (carrier_freq): 1 kHz
     Mean Psychoacoustic Annoyance
     ------------------------------
     MATLAB: 8.64 annoy
-    PYTHON: 8.63 annoy
+    PYTHON: 8.68 annoy
 
-    Difference: -0.26 %
+    Difference: +0.51 %
 
 > AM (A = 0.1, fmod = 4 Hz, md = 1)
 
     Mean Psychoacoustic Annoyance
     ------------------------------
     MATLAB: 8.08 annoy
-    PYTHON: 8.11 annoy
+    PYTHON: 8.20 annoy
 
-    Difference: +0.33 %
+    Difference: +1.5 %
 
 > FM (A = 0.1, fmod = 70 Hz, dev = 100 Hz, md = 1)
 
     Mean Psychoacoustic Annoyance
     ------------------------------
     MATLAB: 16.33 annoy
-    PYTHON: 13.18 annoy
+    PYTHON: 17.62 annoy
 
-    Difference: -19 %
+    Difference: +7.9 %
 
 > Gaussian Noise (A = 0.1)
 
     Mean Psychoacoustic Annoyance
     ------------------------------
-    MATLAB: 34.28 annoy
-    PYTHON: 33.85 annoy
+    MATLAB: 34.60 annoy
+    PYTHON: 33.65 annoy
 
-    Difference: -1.3 %
+    Difference: -2.8 %
 
 > Short Pure Sine (A = 0.1, d = 1.5 s)
 
     Mean Psychoacoustic Annoyance
     ------------------------------
     MATLAB: 8.65 annoy
-    PYTHON: 8.65 annoy
+    PYTHON: 8.70 annoy
 
-    Difference: -0.29 %
+    Difference: -0.51 %
 
 > Percentiles (all 1)
 
     Mean Psychoacoustic Annoyance
     ------------------------------
-    MATLAB: 7.77 annoy
-    PYTHON: 7.77 annoy
+    MATLAB: 3.18 annoy
+    PYTHON: 3.18 annoy
 
     Difference: 0.0 %
 
+(<<<CHECKPOINT>>>)
 ************************************
 ** PsychoacousticAnnoyance_Di2016 **
 ************************************

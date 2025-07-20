@@ -168,7 +168,7 @@ def ex_Tonality_Aures1985():
     
     return T
 
-example = "Roughness_Daniel1997"
+example = "Sharpness_DIN45692"
 
 if __name__ == "__main__":
 
