@@ -568,7 +568,8 @@ def TerhardtExcitationPatterns_v3(insig, fs, dBFS=100):
 
             etmp[N2tmp] = ExcAmp[N1tmp, i] * insig_fft[N2tmp]
 
-        ei_f[i,:] = 20*np.log10(np.abs(etmp))
+        mag = np.maximum(np.abs(etmp), 1e-12)
+        ei_f[i,:] = 20*np.log10(mag)
         ei[i,:]  = 2*params['N']*np.real(np.fft.ifft(etmp))
     
     outsig = np.sum(ei, axis=0) # not exactly same (TODO: check)

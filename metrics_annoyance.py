@@ -959,24 +959,25 @@ def PsychoacousticAnnoyance_More2010(insig=None, fs=None, LoudnessField=None, ti
                     ws[i] = (S['InstantaneousSharpness'][i] - 1.75) * (np.log10(L['InstantaneousLoudness'][i] + 10)) / 4  # in the Fastl&zwicker book, ln is used but it is not clear if it is natural log or log10, but most of subsequent literature uses log10
                 else:
                     ws[i] = 0
-                
-                # replace inf and NaN with zeros
                 ws[np.isinf(ws) | np.isnan(ws)] = 0
                 
-                # influence of roughness and fluctuation strength
                 wfr[i] = (2.18 / (L['InstantaneousLoudness'][i] ** 0.4)) * (0.4 * fluctuation[i] + 0.6 * roughness[i])
-                
-                # replace inf and NaN with zeros
                 wfr[np.isinf(wfr) | np.isnan(wfr)] = 0
                 
-                # Tonality influence
                 wt[i] = abs((1 - np.exp(-gamma_4 * L['InstantaneousLoudness'][i])) ** 2 * (1 - np.exp(-gamma_5 * tonality[i])) ** 2)
-                
-                # replace inf and NaN with zeros
                 wt[np.isinf(wt) | np.isnan(wt)] = 0
                 
                 # More's modified psychoacoustic annoyance
-                PA[i] = abs(L['InstantaneousLoudness'][i] * (1 + np.sqrt(gamma_0 + (gamma_1 * ws[i] ** 2) + (gamma_2 * wfr[i] ** 2) + (gamma_3 * wt[i]))))
+                N_i  = float(np.maximum(L['InstantaneousLoudness'][i], 0.0))
+                ws_i = float(np.nan_to_num(ws[i],  nan=0.0, posinf=0.0, neginf=0.0))
+                wfr_i= float(np.nan_to_num(wfr[i], nan=0.0, posinf=0.0, neginf=0.0))
+                wt_i = float(np.nan_to_num(wt[i],  nan=0.0, posinf=0.0, neginf=0.0))  # if your wt can be negative by design, keep it; else clamp at 0
+
+                rad = gamma_0 + (gamma_1 * ws_i**2) + (gamma_2 * wfr_i**2) + (gamma_3 * wt_i)
+                rad = np.nan_to_num(rad, nan=0.0, neginf=0.0, posinf=0.0)
+                rad = max(rad, 0.0)
+
+                PA[i] = abs(N_i * (1.0 + np.sqrt(rad)))
             
             OUT['wt'] = np.sqrt(wt)  # OUTPUT: tonality and loudness weighting function (not squared)
             OUT['wfr'] = wfr         # OUTPUT: fluctuation strength and sharpness weighting function (not squared)
@@ -1009,7 +1010,9 @@ def PsychoacousticAnnoyance_More2010(insig=None, fs=None, LoudnessField=None, ti
                 wt = 0
             
             # More's modified psychoacoustic annoyance
-            PA_scalar = abs(L['N5'] * (1 + np.sqrt(gamma_0 + (gamma_1 * ws ** 2) + (gamma_2 * wfr ** 2) + (gamma_3 * wt))))
+            radicand = gamma_0 + (gamma_1 * ws**2) + (gamma_2 * wfr**2) + (gamma_3 * wt)
+            radicand = np.maximum(radicand, 0.0)
+            PA_scalar = abs(L['N5'] * (1 + np.sqrt(radicand)))
             
             ## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
             # Output struct for time-varying signals
@@ -1116,7 +1119,9 @@ def PsychoacousticAnnoyance_More2010(insig=None, fs=None, LoudnessField=None, ti
             wt = 0
 
         # More's modified psychoacoustic annoyance
-        PA_scalar = abs(N * (1 + np.sqrt(gamma_0 + (gamma_1 * ws ** 2) + (gamma_2 * wfr ** 2) + (gamma_3 * wt))))
+        radicand = gamma_0 + (gamma_1 * ws**2) + (gamma_2 * wfr**2) + (gamma_3 * wt)
+        radicand = np.maximum(radicand, 0.0)
+        PA_scalar = abs(N * (1 + np.sqrt(radicand)))
 
         OUT = PA_scalar  # Annoyance calculated from the percentiles of each variable
 

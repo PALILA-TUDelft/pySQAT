@@ -187,7 +187,11 @@ def Sharpness_DIN45692(insig: np.ndarray = None, fs: float = None, weight_type: 
         k = 0.11  # adjusted to yield 1 acum using SQAT - DIN45692 allows 0.105<=k<=0.0115 for this weighting function
         
         for i in range(SpecificLoudness.shape[0]):
-            s[i] = k * np.sum(SpecificLoudness[i, :] * g * z * 0.10) / loudness_sones[i]
+            den = float(loudness_sones[i])
+            if den <= 0 or not np.isfinite(den):
+                s[i] = 0.0
+            else:
+                s[i] = k * np.sum(SpecificLoudness[i] * g * z * 0.10) / den
         
         ###########################################################################
     elif weight_type == 'aures':  # Aures model
@@ -195,14 +199,22 @@ def Sharpness_DIN45692(insig: np.ndarray = None, fs: float = None, weight_type: 
         g = np.zeros((SpecificLoudness.shape[0], len(z)))
         for i in range(SpecificLoudness.shape[0]):
             g[i, :] = il_sharpWeights(z, 'aures', loudness_sones[i])  # calculate sharpness weighting factor
-            s[i] = 0.11 * np.sum(SpecificLoudness[i, :] * g[i, :] * z * 0.10) / loudness_sones[i]
+            den = float(loudness_sones[i])
+            if den <= 0 or not np.isfinite(den):
+                s[i] = 0.0
+            else:
+                s[i] = 0.11 * np.sum(SpecificLoudness[i, :] * g[i, :] * z * 0.10) / den
         
         ###########################################################################
     elif weight_type == 'bismarck':  # von Bismarck
         g = il_sharpWeights(z, 'bismarck', None)  # calculate sharpness weighting factor
         
         for i in range(SpecificLoudness.shape[0]):
-            s[i] = 0.11 * np.sum(SpecificLoudness[i, :] * g * z * 0.10) / loudness_sones[i]
+            den = float(loudness_sones[i])
+            if den <= 0 or not np.isfinite(den):
+                s[i] = 0.0
+            else:
+                s[i] = 0.11 * np.sum(SpecificLoudness[i, :] * g * z * 0.10) / den
 
     ###############################################################################
     # Output struct for time-varying signals
