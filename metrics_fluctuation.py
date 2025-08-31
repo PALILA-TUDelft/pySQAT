@@ -493,7 +493,7 @@ def TerhardtExcitationPatterns_v3(insig, fs, dBFS=100):
     
     # Use only samples that fall into the audible range
     Lg = np.abs(insig_fft[params['qb']])
-    LdB = 20 * np.log10(Lg)  # il_To_dB(Lg)
+    LdB = 20 * np.log10(Lg)
     
     # Use only components that are above the hearing threshold
     whichL = np.where(LdB > params['MinExcdB'])[0]

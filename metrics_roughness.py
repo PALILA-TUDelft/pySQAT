@@ -10,6 +10,8 @@ from scipy.fft import fft, ifft
 from scipy.signal.windows import blackman
 from matplotlib import pyplot as plt
 import csv
+from fractions import Fraction
+from scipy.signal import resample_poly
 
 from sound_metrics import *
 from utilities import *
@@ -84,10 +86,8 @@ def Roughness_Daniel1997(insig: ArrayLike, fs: int, time_skip: float = 0, show: 
 
     # resampling input signal
     if not (fs == 44100 or fs == 40960 or fs == 48000):
-        gcd_fs = np.gcd(48000, fs)  # greatest common denominator
-        # Calculate the new length for resampling
-        new_len = int(len(audio) * (48000 / fs))
-        audio = resample(audio, new_len)
+        ratio = Fraction(48000, fs).limit_denominator()
+        audio = resample_poly(audio, ratio.numerator, ratio.denominator)
         fs = 48000
 
     samples = len(audio)
