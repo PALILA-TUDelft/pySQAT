@@ -268,7 +268,7 @@ def ex_PsychoacousticAnnoyance_Di2016():
 
     return A1, A2
 
-example = "PsychoacousticAnnoyance_Di2016"
+example = "Loudness_ISO532_1"
 
 if __name__ == "__main__":
 
