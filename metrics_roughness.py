@@ -5,7 +5,7 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy.io import wavfile
 from scipy.signal import resample
-from scipy.interpolate import interp1d 
+from scipy.interpolate import interp1d
 from scipy.fft import fft, ifft
 from scipy.signal.windows import blackman
 from matplotlib import pyplot as plt

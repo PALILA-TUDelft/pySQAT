@@ -125,7 +125,8 @@ def ex_Sharpness_DIN45692():
 
 def ex_Roughness_Daniel1997():
 
-    soundfile = str(SOUND_DIR / "RefSignal_Roughness_Daniel1997.wav")
+    #soundfile = str(SOUND_DIR / "RefSignal_Roughness_Daniel1997.wav")
+    soundfile = str(SOUND_DIR / "5sec_A320.wav")
     raw_insig, fs = wav2sig(soundfile)
 
     R = Roughness_Daniel1997(insig = raw_insig, # input signal, 1D array
@@ -326,7 +327,7 @@ def ex_shm_tonality_ecma():
 
 #example = "shm_loudness_ecma"
 #example = "shm_roughness_ecma"
-example = "shm_tonality_ecma"
+example = "Roughness_Daniel1997"
 #example = "Loudness_ISO532_1"
 
 
