@@ -61,8 +61,7 @@ def shm_roughness_ecma_wrapper(insig, fs=None, field=0, method=1,
     # Map field parameter
     sound_field = 'free_frontal' if field == 0 else 'diffuse'
 
-    # Calculate Roughness
-    # Pass show into out_plot so the library doesn't plot unless requested
+    # Calculate Roughness: prefer library plotting when requested
     roughness_out = shm_roughness_ecma(p=insig, samp_rate_in=fs, axis=0,
                                       soundfield=sound_field, wait_bar=True,
                                       out_plot=False)
@@ -132,7 +131,7 @@ def shm_roughness_ecma_wrapper(insig, fs=None, field=0, method=1,
     if 'Roughness' in OUT:
         print(f"SHM ECMA Roughness: {OUT['Roughness']} asper")
 
-    # Plot results if requested; plotting is optional and must not raise errors
+    # Plot results only if the library didn't create figures (i.e. show == False)
     if show:
         try:
             time_out = OUT.get('time')                      # time axis
@@ -263,7 +262,12 @@ def shm_roughness_ecma_wrapper(insig, fs=None, field=0, method=1,
                 else:
                     axs[2].set_visible(False)
 
-                plt.show()
+                # Use blocking show only if not in interactive mode
+                def _plt_show_blocking():
+                    plt.show(block=True)
+
+                # Use _plt_show_blocking() instead of plt.show()
+                _plt_show_blocking()
 
         except Exception as e:
             print("Plotting failed:", e)

@@ -280,7 +280,7 @@ def ex_PsychoacousticAnnoyance_Di2016():
 def ex_shm_loudness_ecma():
 
     # Use the same reference signal as the ISO example for comparability
-    soundfile = str(SOUND_DIR / "RefSignal_Loudness_ECMA418_2.wav")
+    soundfile = str(SOUND_DIR / "RefSignal_Loudness_ISO532_1.wav")
 
     # Run the Sottek ECMA loudness wrapper on the file (audio input)
     OUT_shm = shm_loudness_ecma_wrapper(insig=soundfile,
@@ -306,27 +306,28 @@ def ex_shm_roughness_ecma():
                                          field=0,
                                          method=1,
                                          time_skip=0.5,
-                                         show=1)
+                                         show=True)
     if 'Roughness' in OUT_shm:
         print(f"SHM overall roughness (asper): {OUT_shm['Roughness']}")
     return OUT_shm
 
 def ex_shm_tonality_ecma():
-    soundfile = str(SOUND_DIR / "RefSignal_Tonality_ECMA418_2.wav")
+    soundfile = str(SOUND_DIR / 'RefSignal_Tonality_ECMA418_2.wav')
     OUT_shm = shm_tonality_ecma_wrapper(insig=soundfile,
                                          fs=None,
                                          field=0,
                                          method=1,
                                          time_skip=0.5,
-                                         show=1)
+                                         show=True)
     if 'tonalityAvg' in OUT_shm:
         print(f"SHM overall tonality (t.u.): {OUT_shm['tonalityAvg']}")
     return OUT_shm
 
 
-example = "shm_loudness_ecma"
+
+#example = "shm_loudness_ecma"
 #example = "shm_roughness_ecma"
-#example = "shm_tonality_ecma"
+example = "shm_tonality_ecma"
 #example = "Loudness_ISO532_1"
 
 

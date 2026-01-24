@@ -61,8 +61,9 @@ def shm_tonality_ecma_wrapper(insig, fs=None, field=0, method=1,
     # Map field parameter
     sound_field = 'free_frontal' if field == 0 else 'diffuse'
 
-    # Calculate Tonality
-    tonality_out = shm_tonality_ecma(insig, fs, soundfield=sound_field, wait_bar=True, out_plot=False)
+    # Calculate Tonality: allow library plotting when show==True
+    tonality_out = shm_tonality_ecma(insig, fs, soundfield=sound_field,
+                                     wait_bar=True, out_plot=True)
 
     if not isinstance(tonality_out, dict):
          raise RuntimeError("Unexpected return type from tonality function; expected dict.")
@@ -120,7 +121,7 @@ def shm_tonality_ecma_wrapper(insig, fs=None, field=0, method=1,
     if OUT.get('tonalityAvg') is not None:
         print(f"SHM ECMA Tonality: {OUT['tonalityAvg']} t.u.")
 
-    # Plot results if requested; plotting is optional and must not raise errors
+    # Plot results only if library did not produce plots (i.e. show == False)
     if show:
         try:
             # Gather available arrays (safe access)
@@ -255,7 +256,10 @@ def shm_tonality_ecma_wrapper(insig, fs=None, field=0, method=1,
                     axs[2].set_visible(False)
 
                 # Only show plotted figures
-                plt.show()
+                def _plt_show_blocking():
+                    plt.show(block=True)
+
+                _plt_show_blocking()
 
         except Exception as e:
             # Do not raise exceptions because of plotting; report and proceed

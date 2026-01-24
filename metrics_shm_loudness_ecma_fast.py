@@ -17,7 +17,7 @@ __all__ = ["shm_loudness_ecma_fast_wrapper"]
 FloatArray = NDArray[np.floating]
 
 
-def shm_loudness_ecma_fast_wrapper(insig, fs=None, field=0, method=1,
+def      shm_loudness_ecma_fast_wrapper(insig, fs=None, field=0, method=1,
                                    time_skip=0, show=False, dBFS=94,
                                    export_excel=None):
     """Fast wrapper using Sottek's `shm_loudness_ecma_from_comp`.
@@ -54,9 +54,8 @@ def shm_loudness_ecma_fast_wrapper(insig, fs=None, field=0, method=1,
     elif fs is None:
         raise ValueError("If insig is not a filename, fs must be provided.")
 
-    # Call tonality to obtain spec components.
-   
-    tonality = shm_tonality_ecma(insig, fs, axis=0, soundfield='free_frontal', wait_bar=False, out_plot=False)
+    # Call tonality to obtain spec components. Prefer the library plot when show is True
+    tonality = shm_tonality_ecma(insig, fs, axis=0, soundfield='free_frontal', wait_bar=True, out_plot=False)
 
 
     if not isinstance(tonality, dict):
@@ -127,11 +126,11 @@ def shm_loudness_ecma_fast_wrapper(insig, fs=None, field=0, method=1,
         except Exception:
             warnings.warn('Failed to export excel; check export function availability')
 
-    # Optional simple plot if show=True but Sottek plotting was not used
+    # Optional simple plot only when the library doesn't create figures.
     if show:
         try:
-           
             existing = plt.get_fignums()
+            # Only draw fallback when library did not create any figures
             if len(existing) == 0 and 'InstantaneousLoudness' in OUT:
                 inst = np.asarray(OUT['InstantaneousLoudness'])
                 t = np.asarray(OUT.get('time', np.arange(inst.shape[0])))
@@ -249,7 +248,8 @@ def shm_loudness_ecma_fast_wrapper(insig, fs=None, field=0, method=1,
                     else:
                         axs[2].set_visible(False)
 
-                    plt.show()
+                # Use blocking show to hold the fallback figures, same as library behavior
+                plt.show(block=True)
 
         except Exception:
             warnings.warn('Could not produce plots; matplotlib may be unavailable or data shapes unsupported.')
