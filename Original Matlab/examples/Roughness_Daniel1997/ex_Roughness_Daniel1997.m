@@ -17,7 +17,9 @@ clc; clear all; close all;
 dir_ref_sounds = [basepath_SQAT 'sound_files' filesep 'reference_signals' filesep];
 
 %[RefSignal,fs]=audioread([dir_ref_sounds 'RefSignal_Roughness_Daniel1997.wav']); % 'sound_files\reference_signals\' -  path of the sound file for reference  
-[RefSignal,fs]=audioread([dir_ref_sounds '5sec_A320.wav']);
+%[RefSignal,fs]=audioread([dir_ref_sounds '5sec_A320.wav']);
+[RefSignal,fs]=audioread([dir_ref_sounds 'tester.wav']);
+
 time_insig=(0 : length(RefSignal)-1) ./ fs;  % time vector of the audio input, in seconds
 
 %% Compute roughness

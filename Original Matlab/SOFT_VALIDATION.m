@@ -1,5 +1,5 @@
 
-validate = "PsychoacousticAnnoyance_Zwicker1999_PERCENT";
+validate = "Tonality_Aures1985";
 
 switch validate
 
@@ -68,7 +68,8 @@ switch validate
             10, ...
             false ...
         );
-        
+        % 1.0015 and 1.001139
+        % 1.0003 and 1.00029
         fprintf('EPNL of validation clip: %.2f EPNdB\n', OUT.EPNL);
 
     %% ROUGHNESS

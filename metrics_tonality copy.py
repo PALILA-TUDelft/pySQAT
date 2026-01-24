@@ -186,21 +186,10 @@ def Tonality_Aures1985(insig, fs, LoudnessField, time_skip, show=None):
                 idxrng2 = len(Freq) - 1
             else:
                 idxrng2 = idxrng2_candidates[0] + idx + 1
-
-            xp = SPL[idxrng1:idxrng1+2]
-            fp = Freq[idxrng1:idxrng1+2]
-            if xp[0] > xp[1]:
-                xp = xp[::-1]
-                fp = fp[::-1]
-            flow[i] = np.interp(hafmax, xp, fp)
-
-            xp = SPL[idxrng2-1:idxrng2+1]
-            fp = Freq[idxrng2-1:idxrng2+1]
-            if xp[0] > xp[1]:
-                xp = xp[::-1]
-                fp = fp[::-1]
-            fhigh[i] = np.interp(hafmax, xp, fp)
-
+            
+            flow[i] = np.interp(hafmax, SPL[idxrng1:idxrng1+2], Freq[idxrng1:idxrng1+2])  # low freq of the band
+            fhigh[i] = np.interp(hafmax, SPL[idxrng2-1:idxrng2+1], Freq[idxrng2-1:idxrng2+1])  # high freq of the band
+            
             BW[i] = fhigh[i] - flow[i]  # tone's bandwidth
             
             if BW[i] == 0:  # if BW is zero, truncate BW to 1
@@ -422,16 +411,17 @@ def il_SPL_excess(input_data):
         
         idx_cb = ((spectrumBark >= np.round(toneBark[i] - 0.5)) & 
                   (spectrumBark <= np.round(toneBark[i] + 0.5)))  # idx of the critical band around the tonal component
-
-        # Find the FFT bin corresponding to the tone frequency.
-        idx_tone = int(np.argmin(np.abs(freq_Lx - ToneF[i])))
-
-        # Skip the five central samples around the tonal component
-        idx_cb_copy = idx_cb.copy()
-        start_idx = max(0, idx_tone - 2)
-        end_idx = min(len(idx_cb_copy), idx_tone + 3)
-        idx_cb_copy[start_idx:end_idx] = False
-        idx_cb = idx_cb_copy
+        
+        idx_toneBark = np.where(np.round(spectrumBark) == toneBark[i])[0]  # find idx of the tone on the Bark vector
+        
+        if len(idx_toneBark) > 0:
+            idx_toneBark = idx_toneBark[0]
+            # Create a copy of idx_cb to modify
+            idx_cb_copy = idx_cb.copy()
+            start_idx = max(0, idx_toneBark - 2)
+            end_idx = min(len(idx_cb_copy), idx_toneBark + 3)
+            idx_cb_copy[start_idx:end_idx] = False  # skip the five central samples around the tonal component
+            idx_cb = idx_cb_copy
         
         EGR = np.sum(Intensity[idx_cb])  # Masking intensity of broadband noise
         

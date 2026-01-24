@@ -1,6 +1,5 @@
 from __future__ import annotations
 from typing import Dict, Any, Tuple
-import math
 
 import numpy as np
 from numpy.typing import NDArray
@@ -87,8 +86,8 @@ def Roughness_Daniel1997(insig: ArrayLike, fs: int, time_skip: float = 0, show: 
 
     # resampling input signal
     if not (fs == 44100 or fs == 40960 or fs == 48000):
-        gcd_fs = math.gcd(48000, fs)
-        audio = resample_poly(audio, 48000 // gcd_fs, fs // gcd_fs)
+        ratio = Fraction(48000, fs).limit_denominator()
+        audio = resample_poly(audio, ratio.numerator, ratio.denominator)
         fs = 48000
 
     samples = len(audio)
@@ -202,14 +201,18 @@ def Roughness_Daniel1997(insig: ArrayLike, fs: int, time_skip: float = 0, show: 
     dz = 0.5  # Barks
     z = np.arange(0.5, 24, dz)  # frequency in Barks
     
+    # Ensure zb indices are within bounds of k_ht if k_ht is used for MinExcdB lookup
+    # The original MATLAB code uses MinExcdB(zb) directly.
+    # MinBf = MinExcdB[zb] # This would be direct indexing, potentially problematic if zb values are not valid indices
+    # Instead, interpolate MinExcdB values at zb points
     zb = np.sort(np.concatenate([Bf[0, :], Cf[0, :]])).astype(int)
     
     # Ensure zb values are within the range of k_ht for interpolation
-    if len(MinExcdB) > 0:
-        zb_clamped = np.clip(zb, 0, len(MinExcdB) - 1)
-        MinBf = MinExcdB[zb_clamped]
+    if len(k_ht) > 0:
+        zb_clamped = np.clip(zb, k_ht.min(), k_ht.max())
+        MinBf = np.interp(zb_clamped, k_ht, MinExcdB)
     else:
-        MinBf = np.zeros_like(zb, dtype=float)
+        MinBf = np.zeros_like(zb, dtype=float) # Fallback if k_ht is empty
 
     ei = np.zeros((47, N))
     Fei = np.zeros((47, N), dtype=complex)
@@ -427,14 +430,14 @@ def Roughness_Daniel1997(insig: ArrayLike, fs: int, time_skip: float = 0, show: 
     for l in range(42, 47):
         Hweight[l, :] = Hweight[41, :]
 
-    AmpCal = from_db(91.2) * 2 / (N * np.mean(blackman(N, sym=False)))
+    AmpCal = from_db(91.2) * 2 / (N * np.mean(blackman(N)))
 
     # Calibration between wav-level and loudness-level (assuming
     # blackman window and FFT will follow)
     Chno = 47  # number of channels
     # Corrected calibration factor to fix 3.5% error in asper calculations
     # Original value was 0.25, adjusted to account for 3.5% over-estimation
-    Cal = 0.5 #0.2415  # calibration factor adjusted to yield exactly 1 asper for reference signal (change from 0.25)
+    Cal = 0.2415  # calibration factor adjusted to yield exactly 1 asper for reference signal (change from 0.25)
     qb = np.arange(N0, Ntop + 1)
     freqs = (qb + 1) * fs / N
     hBPi = np.zeros((Chno, N))
@@ -443,8 +446,8 @@ def Roughness_Daniel1997(insig: ArrayLike, fs: int, time_skip: float = 0, show: 
     ki = np.zeros(Chno - 2)
     ri = np.zeros(Chno)
 
-    startIndex = 1
-    endIndex = N + 1
+    startIndex = 0
+    endIndex = N
     TimePoints = np.zeros(n)
     R_mat = np.zeros(n)
     SPL_mat = np.zeros(n)
@@ -515,14 +518,12 @@ def Roughness_Daniel1997(insig: ArrayLike, fs: int, time_skip: float = 0, show: 
             for l in range(min(whichZ[0, k_idx] + 1, Chno)): # loop up to floored bark number of freq index k
                 if l < len(MinBf): # Defensive check
                     Stemp = (S1 * (Btmp - (l * 0.5))) + Ltmp
-                    if Stemp > MinBf[l]:
-                        Slopes[k_idx, l] = from_db(Stemp) # This is where Slopes is populated
+                    Slopes[k_idx, l] = from_db(Stemp) # This is where Slopes is populated
             
             for l in range(max(whichZ[1, k_idx], 0), Chno): # loop up to ceil'd bark number
                 if l < len(MinBf): # Defensive check
                     Stemp = (S2[k_idx] * ((l * 0.5) - Btmp)) + Ltmp
-                    if Stemp > MinBf[l]:
-                        Slopes[k_idx, l] = from_db(Stemp) # This is where Slopes is populated
+                    Slopes[k_idx, l] = from_db(Stemp) # This is where Slopes is populated
 
         for k_idx in range(Chno):  # loop over each channel
             etmp = np.zeros(N, dtype=complex)
