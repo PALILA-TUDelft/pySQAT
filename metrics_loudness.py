@@ -10,6 +10,7 @@ from scipy.fft import fft, ifft
 from scipy.signal.windows import hann, blackman
 from matplotlib import pyplot as plt
 from scipy.signal import resample
+from fractions import Fraction
 import warnings
 import sys
 
@@ -288,19 +289,19 @@ def Loudness_ISO532_1(insig, fs=None, field=0, method=2, time_skip=0, show=False
     CoreL = np.zeros((NumSamplesLevel, 21))
 
     # Vectorized processing - extract relevant third octave bands (columns 8-26)
-    Le[:, :19] = ThirdOctaveLevel[:, 8:27]
+    Le[:, :20] = ThirdOctaveLevel[:, 8:28]
     Le[:, :3] = LCB[:, :3]
-    Le[:, :19] -= A0[:19]
+    Le[:, :20] -= A0[:20]
 
     if field == 1:
-        Le[:, :19] += DDF[:19]
-    mask = Le[:, :19] > LTQ[:19]
+        Le[:, :20] += DDF[:20]
+    mask = Le[:, :20] > LTQ[:20]
     S = 0.25
-    MP1 = 0.0635 * 10 ** (0.025 * LTQ[:19])
-    Le_corrected = Le[:, :19] - DCB[:19]
-    MP2 = (((1 - S) + S * 10 ** (0.1 * (Le_corrected - LTQ[:19]))) ** 0.25) - 1
+    MP1 = 0.0635 * 10 ** (0.025 * LTQ[:20])
+    Le_corrected = Le[:, :20] - DCB[:20]
+    MP2 = (((1 - S) + S * 10 ** (0.1 * (Le_corrected - LTQ[:20]))) ** 0.25) - 1
     CoreL_temp = MP1 * MP2
-    CoreL[:, :19] = np.where(mask, np.maximum(CoreL_temp, 0), 0)
+    CoreL[:, :20] = np.where(mask, np.maximum(CoreL_temp, 0), 0)
 
     # *************************************************************************
     # STEP 7 - Correction of specific loudness within the lowest critical band
@@ -455,8 +456,7 @@ def Loudness_ISO532_1(insig, fs=None, field=0, method=2, time_skip=0, show=False
 
     LN = np.zeros(NumSamplesLevel)
     N_mat = np.zeros(NumSamplesLevel)
-    Spec_N = np.zeros(240) 
-    ZUP = ZUP+0.0001 # <----- add constant factor to ZUP according to code provided by ISO 532-1
+    Spec_N = np.zeros(240)
     ns = np.zeros((NumSamplesLevel, 240))
 
     for l in range(NumSamplesLevel):
@@ -909,7 +909,7 @@ def EPNL_FAR_Part36(insig=None, fs=None, method=None, dt=None, threshold=None, s
         InstantaneousSPL = 10.0 * np.log10(np.sum(np.power(10.0, SPL_TOB_spectra * 0.1), axis=1))
 
         # Optimized time vector creation
-        time = np.arange(num_times) * dt
+        time = np.linspace(0, dt * num_times, num_times)
 
         # OUTPUT
         OUT['InstantaneousSPL'] = InstantaneousSPL
@@ -927,7 +927,8 @@ def EPNL_FAR_Part36(insig=None, fs=None, method=None, dt=None, threshold=None, s
         # resample to 48 kHz if necessary
         if fs != 48000:
             insig_flat = insig.flatten()
-            insig = resample(insig_flat, int(len(insig_flat) * 48000 / fs)).reshape(-1, 1)
+            ratio = Fraction(48000, fs).limit_denominator()
+            insig = resample_poly(insig_flat, ratio.numerator, ratio.denominator).reshape(-1, 1)
             fs = 48000
             print(f'\n{sys._getframe().f_code.co_name}: The 1/3 octave band filter bank used in this script has only been validated at a sampling frequency fs=48 kHz, resampling to this fs value\n')
 
@@ -970,8 +971,7 @@ def EPNL_FAR_Part36(insig=None, fs=None, method=None, dt=None, threshold=None, s
 
         # Optimized time vector calculation
         time_duration = time_insig[-1] - time_insig[0]
-        time_steps = int(round(time_duration / dt)) + 1
-        time = np.linspace(time_insig[0], time_insig[-1], min(time_steps, num_times))
+        time = time_insig[0] + np.arange(num_times) * dt
         
         # Ensure time vector matches num_times
         if len(time) < num_times:
@@ -1190,7 +1190,7 @@ def EPNL_FAR_Part36(insig=None, fs=None, method=None, dt=None, threshold=None, s
 
     return OUT
 
-check_which = 1
+check_which = 2
 
 if __name__ == "__main__":
     if check_which == 0: # NO TEST
