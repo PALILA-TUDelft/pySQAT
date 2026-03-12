@@ -179,7 +179,7 @@ def ex_Tonality_Aures1985():
 
 def ex_PsychoacousticAnnoyance_Zwicker1999():
 
-    soundfile = str(SOUND_DIR / "RefSignal_Loudness_ISO532_1.wav")
+    soundfile = str(SOUND_DIR / "5sec_A320.wav")
     raw_insig, fs = wav2sig(soundfile)
     lvl_cal_signal = 40
 
@@ -280,14 +280,14 @@ def ex_PsychoacousticAnnoyance_Di2016():
 def ex_shm_loudness_ecma():
 
     # Use the same reference signal as the ISO example for comparability
-    soundfile = str(SOUND_DIR / "RefSignal_Loudness_ISO532_1.wav")
+    soundfile = str(SOUND_DIR / "ExStereo_TrainStation7-0100-0130.wav")
 
     # Run the Sottek ECMA loudness wrapper on the file (audio input)
     OUT_shm = shm_loudness_ecma_wrapper(insig=soundfile,
                                        fs=None,
                                        field=0,
                                        method=1,
-                                       time_skip=0.5,
+                                       time_skip=304E-3,
                                        show=True)
 
     # Print a few key summary values
@@ -324,12 +324,18 @@ def ex_shm_tonality_ecma():
     return OUT_shm
 
 
-
-#example = "shm_loudness_ecma"
+example = "Loudness_ISO532_1"
+# example = "EPNL_FAR_Part36"
+# example = "Sharpness_DIN45692"
+# example = "Roughness_Daniel1997"
+# example = "shm_loudness_ecma"
+# example = "FluctuationStrength_Osses2016" 
+# example = "Tonality_Aures1985"
 #example = "shm_roughness_ecma"
-example = "shm_tonality_ecma"
-#example = "Loudness_ISO532_1"
-
+# example = "shm_tonality_ecma"
+# example = "PsychoacousticAnnoyance_Zwicker1999"
+# example = "PsychoacousticAnnoyance_More2010"
+#example = "PsychoacousticAnnoyance_Di2016"
 
 if __name__ == "__main__":
 

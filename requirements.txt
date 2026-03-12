@@ -17,5 +17,6 @@ mysql
 sounddevice
 pyqtgraph
 mosqito
-
+openpyxl
+sottek_hearing_model
 

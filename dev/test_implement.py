@@ -12,8 +12,13 @@ from matplotlib import pyplot as plt
 from scipy.signal import resample
 import warnings
 import sys
+from pathlib import Path
 
-from sound_metrics import *
+PARENT_DIR = Path(__file__).resolve().parent.parent
+if str(PARENT_DIR) not in sys.path:
+    sys.path.insert(0, str(PARENT_DIR))
+
+from SQAT4PY.sound_metrics import *
 from utilities import *
 
 __all__ = ["Loudness_ISO532_1", "EPNL_FAR_Part36"]

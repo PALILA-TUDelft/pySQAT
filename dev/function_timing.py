@@ -11,8 +11,13 @@ from scipy.signal.windows import hann, blackman
 from matplotlib import pyplot as plt
 import warnings, sys, os, inspect
 import timeit
+from pathlib import Path
 
-from sound_metrics import *
+PARENT_DIR = Path(__file__).resolve().parent.parent
+if str(PARENT_DIR) not in sys.path:
+    sys.path.insert(0, str(PARENT_DIR))
+
+from SQAT4PY.sound_metrics import *
 from utilities import *
 from metrics_loudness import Loudness_ISO532_1, EPNL_FAR_Part36
 from metrics_sharpness import Sharpness_DIN45692
