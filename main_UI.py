@@ -41,7 +41,7 @@ def _lazy_imports():
     global FluctuationStrength_Osses2016
     global Tonality_Aures1985
     global PsychoacousticAnnoyance_Di2016, PsychoacousticAnnoyance_Zwicker1999, PsychoacousticAnnoyance_More2010
-    global create_metric_plot, create_metric_plot_split
+    global create_metric_plot, create_metric_plot_split, create_metric_overlay_plot
     global Workbook, get_column_letter, XFont, PatternFill, XAlignment, Border, Side
 
     from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as _fca, NavigationToolbar2QT as _ntb
@@ -75,8 +75,9 @@ def _lazy_imports():
     PsychoacousticAnnoyance_Zwicker1999 = _h
     PsychoacousticAnnoyance_More2010 = _i
 
-    from plotting_metrics import create_metric_plot as _j, create_metric_plot_split as _k
-    create_metric_plot, create_metric_plot_split = _j, _k
+    from plotting_metrics import (create_metric_plot as _j, create_metric_plot_split as _k,
+                                   create_metric_overlay_plot as _l)
+    create_metric_plot, create_metric_plot_split, create_metric_overlay_plot = _j, _k, _l
 
     from openpyxl import Workbook as _W
     from openpyxl.utils import get_column_letter as _gcl
@@ -91,7 +92,7 @@ Loudness_ISO532_1 = EPNL_FAR_Part36 = None
 Sharpness_DIN45692 = Roughness_Daniel1997 = FluctuationStrength_Osses2016 = None
 Tonality_Aures1985 = None
 PsychoacousticAnnoyance_Di2016 = PsychoacousticAnnoyance_Zwicker1999 = PsychoacousticAnnoyance_More2010 = None
-create_metric_plot = create_metric_plot_split = None
+create_metric_plot = create_metric_plot_split = create_metric_overlay_plot = None
 Workbook = get_column_letter = None
 XFont = PatternFill = XAlignment = Border = Side = None
 
@@ -1082,7 +1083,11 @@ class SQATModernApp(QMainWindow):
         self.chk_save  = QCheckBox("Save figures")
         self.chk_excel = QCheckBox("Export to Excel")
         self.chk_split = QCheckBox("Split figures")
-        for chk in (self.chk_show, self.chk_save, self.chk_excel, self.chk_split):
+        self.chk_together = QCheckBox("Plot together")
+        self.chk_together.setToolTip(
+            "When on, the Graphs window overlays the time-wise evolution of the "
+            "selected metric for ALL analysed sound files on a single plot.")
+        for chk in (self.chk_show, self.chk_save, self.chk_excel, self.chk_split, self.chk_together):
             olay.addWidget(chk)
         olay.addStretch()
         self.chk_save.stateChanged.connect(self.on_save_toggle)
@@ -1771,6 +1776,27 @@ class SQATModernApp(QMainWindow):
 
     def open_graph_window(self):
         metric = self.cmb_plot_metric.currentText().strip() or self.last_metric
+
+        # ── "Plot together": overlay all analysed files for this metric ──────────
+        if getattr(self, "chk_together", None) is not None and self.chk_together.isChecked():
+            results = self.metric_results.get(metric, {})
+            if len(results) >= 1:
+                results_by_label = {
+                    self.file_label_map.get(fp, Path(fp).name): out
+                    for fp, out in results.items()
+                }
+                fig = create_metric_overlay_plot(metric, results_by_label)
+                if fig is None:
+                    QMessageBox.information(
+                        self, "No overlay",
+                        "This metric has no time-series that can be overlaid.")
+                    return
+                dlg = GraphWindow(fig, f"{metric}  ·  all files ({len(results_by_label)})",
+                                  parent=self, style=APP_STYLE)
+                dlg.exec()
+                return
+            # fall through to single-file plot if nothing was analysed yet
+
         file_path = self._selected_active_file_path()
         out = None
         if metric and file_path:

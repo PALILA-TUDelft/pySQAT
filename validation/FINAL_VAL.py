@@ -57,7 +57,10 @@ warnings.filterwarnings("ignore")
 # ── paths ──────────────────────────────────────────────────────────────────────
 HERE     = Path(__file__).resolve().parent
 ROOT     = HERE.parent
-SF_DIR   = ROOT / "sound_files" / "reference_signals"
+# Sound files are split into calibration "reference" signals and "examples".
+SF_ROOT  = ROOT / "sound_files"
+REF_DIR  = SF_ROOT / "reference"
+EX_DIR   = SF_ROOT / "examples"
 PY_JSON  = HERE / "python_results" / "results_python.json"
 MAT_JSON = HERE / "matlab_results" / "results_matlab.json"
 FIG_DIR  = HERE / "report" / "figures"
@@ -68,6 +71,28 @@ for d in (PY_JSON.parent, FIG_DIR, HERE / "report", HERE / "comparison"):
     d.mkdir(parents=True, exist_ok=True)
 
 sys.path.insert(0, str(ROOT))
+
+# ── user-definable acceptance tolerances (relative error, %) ───────────────────
+#   PASS : |rel err| <  TOL_PASS
+#   WARN : TOL_PASS <= |rel err| < TOL_FAIL
+#   FAIL : |rel err| >= TOL_FAIL
+# Defaults: PASS < 1 %, FAIL >= 2 %. Override on the command line:
+#   python validation/FINAL_VAL.py --pass-tol 1 --fail-tol 2
+TOL_PASS = 1.0
+TOL_FAIL = 2.0
+
+
+def _parse_tolerances(argv: list[str]) -> None:
+    """Set the global PASS/FAIL tolerances from CLI args (defaults 1 % / 2 %)."""
+    global TOL_PASS, TOL_FAIL
+    import argparse
+    ap = argparse.ArgumentParser(add_help=True, description="SQAT4PY full validation")
+    ap.add_argument("--pass-tol", type=float, default=TOL_PASS,
+                    help="PASS threshold in %% relative error (default: 1)")
+    ap.add_argument("--fail-tol", type=float, default=TOL_FAIL,
+                    help="FAIL threshold in %% relative error (default: 2)")
+    args, _ = ap.parse_known_args(argv)
+    TOL_PASS, TOL_FAIL = float(args.pass_tol), float(args.fail_tol)
 
 # ── metric imports ─────────────────────────────────────────────────────────────
 from utilities import wav2sig
@@ -390,6 +415,16 @@ METRIC_CFG: dict[str, dict] = {
 
 # ── signal loading ─────────────────────────────────────────────────────────────
 
+def _resolve_sf(fname: str) -> Path:
+    """Locate a sound file in either the reference/ or examples/ sub-folder."""
+    for d in (REF_DIR, EX_DIR):
+        cand = d / fname
+        if cand.exists():
+            return cand
+    # Fall back to reference/ so the error message is meaningful.
+    return REF_DIR / fname
+
+
 def _dbfs_for_spl(wav_path: Path, target_spl: float) -> float:
     _, d = wavfile.read(str(wav_path))
     if d.dtype.kind in "iu":
@@ -404,7 +439,7 @@ def _dbfs_for_spl(wav_path: Path, target_spl: float) -> float:
 
 
 def load_signal(fname: str, dBFS_in: float | None) -> tuple[np.ndarray, int]:
-    wav_path = SF_DIR / fname
+    wav_path = _resolve_sf(fname)
     if dBFS_in is None:
         dBFS_in = _dbfs_for_spl(wav_path, _TARGET_SPL[fname])
     return wav2sig(str(wav_path), dBFS=dBFS_in)
@@ -722,7 +757,7 @@ def build_rows(python: dict[str, dict], matlab: dict | None) -> list[dict]:
     rows: list[dict] = []
     for mdef in METRICS:
         mid     = mdef["id"]
-        tol_p, tol_f = mdef["tol"]
+        tol_p, tol_f = TOL_PASS, TOL_FAIL   # user-defined global tolerances
         py_mid  = python.get(mid, {})
         mat_mid = (matlab or {}).get(mid, {})
 
@@ -863,7 +898,7 @@ _PREAMBLE = r"""\documentclass[a4paper,10pt]{article}
 
 def build_latex_table(mdef: dict, rows: list[dict], has_matlab: bool) -> str:
     mid    = mdef["id"]
-    tol_p, tol_f = mdef["tol"]
+    tol_p, tol_f = TOL_PASS, TOL_FAIL   # user-defined global tolerances
     scalars = mdef["scalars"]
 
     col_spec = r"l l r r r r r c" if has_matlab else r"l l r r r c"
@@ -910,6 +945,37 @@ def build_latex_table(mdef: dict, rows: list[dict], has_matlab: bool) -> str:
     return "\n".join(L)
 
 
+def build_config_table(metrics_list: list[dict]) -> str:
+    """LaTeX table documenting each metric's full run configuration (audio
+    files + dBFS, parameters, tolerances) so the report is reproducible without
+    opening the code."""
+    L: list[str] = []
+    A = L.append
+    A(r"\begin{longtable}{p{3.0cm} p{4.7cm} p{4.5cm} p{1.6cm}}")
+    A(r"\caption{Run configuration of every metric -- audio cases (with the dBFS "
+      r"full-scale convention), function parameters, and acceptance tolerances. "
+      rf"Resampling is internal. Global tolerance: PASS $<{TOL_PASS:g}\%$, "
+      rf"FAIL $\geq{TOL_FAIL:g}\%$.}} \\")
+    hdr = (r"\textbf{Metric} & \textbf{Audio cases (dBFS)} & "
+           r"\textbf{Parameters} & \textbf{Tol (\%)} \\")
+    A(r"\toprule")
+    A(hdr)
+    A(r"\midrule\endfirsthead")
+    A(r"\toprule " + hdr + r"\midrule\endhead")
+    A(r"\bottomrule\endlastfoot")
+
+    for mdef in metrics_list:
+        cases = "; ".join(
+            f"{c}: {fn} ({'auto' if d is None else f'{d:g}'})"
+            for c, (fn, d) in mdef["audio_cases"].items()
+        )
+        params = ", ".join(f"{k}={v}" for k, v in mdef["params"].items()) or "—"
+        A(rf"{_tex(mdef['label'])} & {_tex(cases)} & {_tex(params)} "
+          rf"& $<{TOL_PASS:g}\,/\,\geq{TOL_FAIL:g}$ \\")
+    A(r"\end{longtable}")
+    return "\n".join(L)
+
+
 def write_latex(rows: list[dict], fig_files: dict[str, Path],
                 has_matlab: bool, tex_path: Path) -> None:
     ts  = datetime.now().strftime("%Y-%m-%d  %H:%M:%S")
@@ -931,6 +997,11 @@ def write_latex(rows: list[dict], fig_files: dict[str, Path],
     A(r"\end{tabular}}\vfill"
       r"{\small\color{gray}Auto-generated by \texttt{validation/FINAL\_VAL.py}}")
     A(r"\end{titlepage}\newpage\tableofcontents\newpage")
+
+    # ── run-configuration table (reproducibility) ──────────────────────────────
+    A(r"\section{Run Configuration}")
+    A(build_config_table([m for m in METRICS if m["available"]]))
+    A(r"\clearpage")
 
     # ── per-group sections ──────────────────────────────────────────────────────
     groups = [("classic",   "Classic Metrics"),
@@ -968,6 +1039,10 @@ def write_latex(rows: list[dict], fig_files: dict[str, Path],
 # ── main ───────────────────────────────────────────────────────────────────────
 
 def main() -> None:
+    # 0. User-defined acceptance tolerances (defaults: PASS < 1 %, FAIL >= 2 %)
+    _parse_tolerances(sys.argv[1:])
+    print(f"  Acceptance tolerances:  PASS < {TOL_PASS:g}%   WARN < {TOL_FAIL:g}%   FAIL >= {TOL_FAIL:g}%")
+
     # 1. Run Python metrics
     python = run_all_python()
 

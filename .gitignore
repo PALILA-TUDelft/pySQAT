@@ -53,9 +53,6 @@ coverage.xml
 *.log
 *.pot
 
-# Sphinx documentation
-docs/_build/
-
 # Validation outputs
 validation/__pycache__/
 validation/comparison/

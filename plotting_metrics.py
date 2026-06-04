@@ -378,10 +378,21 @@ def plot_fluctuation_analysis(out: Dict[str, Any]) -> Figure:
             verticalalignment='top', fontfamily='monospace',
             bbox=dict(boxstyle='round', facecolor='lightcyan', alpha=0.7))
     
-    # Plot 3: Placeholder for modulation analysis
+    # Plot 3: Time-averaged specific fluctuation strength (Bark scale)
     ax3 = fig.add_subplot(2, 2, 3)
-    ax3.axis('off')
-    
+    bark = np.asarray(out.get("barkAxis", [])).ravel()
+    spec_fs = np.asarray(out.get("TimeAveragedSpecificFluctuationStrength", [])).ravel()
+    if len(bark) > 0 and len(spec_fs) > 0:
+        n = min(len(bark), len(spec_fs))
+        ax3.plot(bark[:n], spec_fs[:n], color='teal', linewidth=2)
+        ax3.set_title('Time-averaged specific fluctuation strength', fontsize=12, fontweight='bold')
+        ax3.set_xlabel('Critical band, $z$ (Bark)', fontsize=11)
+        ax3.set_ylabel("Specific FS, $FS'$ (vacil/Bark)", fontsize=11)
+        ax3.grid(True, alpha=0.3)
+        ax3.set_xlim([0, 24])
+    else:
+        ax3.axis('off')
+
     # Plot 4: Statistics
     ax4 = fig.add_subplot(2, 2, 4)
     ax4.axis('off')
@@ -683,10 +694,21 @@ def plot_epnl_analysis(out: Dict[str, Any]) -> Figure:
             verticalalignment='top', fontfamily='monospace',
             bbox=dict(boxstyle='round', facecolor='lightblue', alpha=0.7))
     
-    # Plot 3: Placeholder for spectral data
+    # Plot 3: Time-averaged 1/3-octave band SPL spectrum
     ax3 = fig.add_subplot(2, 2, 3)
-    ax3.axis('off')
-    
+    tob_f   = np.asarray(out.get("TOB_freq", [])).ravel()
+    spl_tob = np.asarray(out.get("SPL_TOB_avg", [])).ravel()
+    if len(tob_f) > 0 and len(spl_tob) > 0:
+        n = min(len(tob_f), len(spl_tob))
+        ax3.semilogx(tob_f[:n], spl_tob[:n], color='steelblue', marker='o',
+                     markersize=3, linewidth=1.8)
+        ax3.set_title('Time-averaged 1/3-octave band SPL', fontsize=12, fontweight='bold')
+        ax3.set_xlabel('Frequency, $f$ (Hz)', fontsize=11)
+        ax3.set_ylabel('SPL, $L_p$ (dB)', fontsize=11)
+        ax3.grid(True, alpha=0.3, which='both')
+    else:
+        ax3.axis('off')
+
     # Plot 4: Statistics
     ax4 = fig.add_subplot(2, 2, 4)
     ax4.axis('off')
@@ -745,8 +767,165 @@ def create_metric_plot(metric: str, out: Dict[str, Any]) -> Optional[Figure]:
             return plot_epnl_analysis(out)
     except Exception as e:
         print(f"Error creating plot for {metric}: {e}")
-    
+
     return None
+
+
+# ── "plot together" overlay configuration ─────────────────────────────────────
+# Per metric, the list of 1-D curves that are *directly comparable* across sound
+# files (they share a common, meaningful x-axis), so several files can be
+# overlaid on the same axes. Each panel becomes one subplot in which every file
+# is drawn as one curve.
+#
+# Deliberately EXCLUDED (overlaying multiple files is not meaningful / not
+# directly comparable):
+#   * 2-D spectrograms / heat-maps  (instantaneous specific loudness/roughness/…)
+#   * raw input-signal waveforms and per-frame instantaneous spectra
+# Each panel dict: y (data key), x ("time" or a data key), xlabel, ylabel,
+# title, xlog.
+def _panel(y, x, xlabel, ylabel, title, xlog=False):
+    return dict(y=y, x=x, xlabel=xlabel, ylabel=ylabel, title=title, xlog=xlog)
+
+
+_T = "Time, $t$ (s)"
+_Z = "Critical band, $z$ (Bark)"
+
+_OVERLAY_PANELS: Dict[str, list] = {
+    "Loudness (ISO 532-1)": [
+        _panel("InstantaneousLoudness", "time", _T, "Loudness, $N$ (sone)", "Instantaneous loudness"),
+        _panel("SpecificLoudness", "barkAxis", _Z, "Specific loudness, $N'$ (sone/Bark)", "Time-avg specific loudness"),
+    ],
+    "Loudness (ECMA 418-2)": [
+        _panel("InstantaneousLoudness", "time", _T, "Loudness, $N$ (sone)", "Instantaneous loudness"),
+        _panel("SpecificLoudness", "barkAxis", _Z, "Specific loudness", "Time-avg specific loudness"),
+    ],
+    "Sharpness (DIN 45692)": [
+        _panel("InstantaneousSharpness", "time", _T, "Sharpness, $S$ (acum)", "Instantaneous sharpness"),
+    ],
+    "Roughness (Daniel 1997)": [
+        _panel("InstantaneousRoughness", "time", _T, "Roughness, $R$ (asper)", "Instantaneous roughness"),
+        _panel("TimeAveragedSpecificRoughness", "barkAxis", _Z, "Specific roughness, $R'$ (asper/Bark)", "Time-avg specific roughness"),
+    ],
+    "Roughness (ECMA 418-2)": [
+        _panel("InstantaneousRoughness", "time", _T, "Roughness, $R$ (asper)", "Instantaneous roughness"),
+    ],
+    "Fluctuation Strength (Osses 2016)": [
+        _panel("InstantaneousFluctuationStrength", "time", _T, "Fluctuation strength, $FS$ (vacil)", "Instantaneous fluctuation strength"),
+        _panel("TimeAveragedSpecificFluctuationStrength", "barkAxis", _Z, "Specific FS, $FS'$ (vacil/Bark)", "Time-avg specific fluctuation strength"),
+    ],
+    "Tonality (Aures 1985)": [
+        _panel("InstantaneousTonality", "time", _T, "Tonality, $K$ (t.u.)", "Instantaneous tonality"),
+        _panel("TonalWeighting", "time", _T, "Tonal weighting, $w_T$", "Tonal weighting"),
+        _panel("LoudnessWeighting", "time", _T, "Loudness weighting, $w_{Gr}$", "Loudness weighting"),
+    ],
+    "Tonality (ECMA 418-2)": [
+        _panel("InstantaneousTonality", "time", _T, "Tonality, $T$ (t.u.)", "Instantaneous tonality"),
+    ],
+    "EPNL (FAR Part 36)": [
+        _panel("PNLT", "time", _T, "PNLT (TPNdB)", "Tone-corrected perceived noise level"),
+        _panel("PNL", "time", _T, "PNL (PNdB)", "Perceived noise level"),
+        _panel("SPL_TOB_avg", "TOB_freq", "Frequency, $f$ (Hz)", "SPL, $L_p$ (dB)", "Time-avg 1/3-octave SPL", xlog=True),
+    ],
+}
+for _pa in ("Annoyance (Di 2016)", "Annoyance (Zwicker 1999)", "Annoyance (More 2010)"):
+    _OVERLAY_PANELS[_pa] = [
+        _panel("InstantaneousPA", "time", _T, "Annoyance, $PA$", "Instantaneous annoyance"),
+    ]
+
+
+def _overlay_xy(out: Dict[str, Any], panel: dict):
+    """Return (x, y) arrays for one panel of one file, or (None, None)."""
+    y = np.asarray(out.get(panel["y"], [])).ravel()
+    xk = panel["x"]
+    x = (np.asarray(out.get("time", [])).ravel() if xk == "time"
+         else np.asarray(out.get(xk, [])).ravel())
+    if x.size == 0 or y.size == 0:
+        return None, None
+    n = min(len(x), len(y))
+    return x[:n], y[:n]
+
+
+def create_metric_overlay_plot(metric: str,
+                               results_by_label: Dict[str, Dict[str, Any]]) -> Optional[Figure]:
+    """
+    Overlay the results of several sound files for one metric on the same figure,
+    for *every* output that is physically/mathematically comparable across files
+    (time-series and time-averaged Bark / 1/3-octave profiles), with a
+    descriptive legend (one entry per file).
+
+    2-D spectrograms / heat-maps and raw waveforms are excluded, since overlaying
+    multiple files for those is not meaningful.
+
+    Parameters
+    ----------
+    metric : str
+        Metric name (e.g. "Loudness (ISO 532-1)").
+    results_by_label : dict
+        Mapping ``{file_label: output_dict}`` produced by analysing each file.
+
+    Returns
+    -------
+    Figure or None
+        A figure with one overlaid subplot per comparable output, or ``None``
+        when nothing comparable is available.
+    """
+    panels = None
+    for name, pl in _OVERLAY_PANELS.items():
+        if name == metric or name.split(" (")[0] in metric:
+            panels = pl
+            break
+    if not panels:
+        return None
+
+    # Keep only panels with data in at least one file.
+    usable = []
+    for panel in panels:
+        if any(isinstance(out, dict) and _overlay_xy(out, panel)[0] is not None
+               for out in results_by_label.values()):
+            usable.append(panel)
+    if not usable:
+        return None
+
+    n      = len(usable)
+    ncols  = 1 if n == 1 else 2
+    nrows  = int(np.ceil(n / ncols))
+    fig    = Figure(figsize=(7.0 * ncols, 4.2 * nrows + 0.3), dpi=100)
+    cmap   = plt_get_cmap(len(results_by_label))
+
+    for pi, panel in enumerate(usable):
+        ax = fig.add_subplot(nrows, ncols, pi + 1)
+        for i, (label, out) in enumerate(results_by_label.items()):
+            if not isinstance(out, dict):
+                continue
+            x, y = _overlay_xy(out, panel)
+            if x is None:
+                continue
+            ax.plot(x, y, linewidth=1.6, color=cmap[i % len(cmap)], label=label)
+        if panel.get("xlog"):
+            try:
+                ax.set_xscale("log")
+            except Exception:
+                pass
+        ax.set_title(panel["title"], fontsize=11, fontweight="bold")
+        ax.set_xlabel(panel["xlabel"], fontsize=10)
+        ax.set_ylabel(panel["ylabel"], fontsize=10)
+        ax.grid(True, alpha=0.3)
+        ax.legend(loc="best", fontsize=8, framealpha=0.9, title="Sound file")
+
+    fig.suptitle(f"{metric} — all sound files", fontsize=13, fontweight="bold")
+    fig.tight_layout(rect=[0, 0, 1, 0.97])
+    return fig
+
+
+def plt_get_cmap(n: int):
+    """Return a list of ``n`` distinct colours for overlay curves."""
+    import matplotlib.cm as cm
+    base = ["#2563eb", "#dc2626", "#059669", "#d97706", "#7c3aed",
+            "#0891b2", "#be185d", "#65a30d", "#475569", "#ea580c"]
+    if n <= len(base):
+        return base[:max(n, 1)]
+    colours = cm.get_cmap("tab20", n)
+    return [colours(i) for i in range(n)]
 
 
 def create_metric_plot_split(metric: str, out: Dict[str, Any]) -> Optional[Dict[str, Figure]]:

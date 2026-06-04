@@ -34,7 +34,7 @@ python main_UI.py
 
 ## Repository Layout
 - `original_matlab/`: original SQAT MATLAB reference implementation
-- `sound_files/reference_signals/`: bundled WAV reference signals
+- `sound_files/reference/`: bundled reference WAV signals used for verification
+- `sound_files/examples/`: bundled example and demo WAV signals
 - `validation/`: cross-check scripts plus generated reports/results
-- `docs/`: Sphinx documentation
 - `logos/`: shared branding assets

@@ -15,8 +15,28 @@ from metrics_tonality import Tonality_Aures1985
 from metrics_annoyance import PsychoacousticAnnoyance_Zwicker1999, PsychoacousticAnnoyance_More2010, PsychoacousticAnnoyance_Di2016
 from pathlib import Path
 
-# Bundled reference sound files directory relative to this examples module
-SOUND_DIR = Path(__file__).resolve().parent / "sound_files" / "reference_signals"
+# Bundled sound files are split into "reference" (calibration) and "examples".
+_SF_ROOT = Path(__file__).resolve().parent / "sound_files"
+
+
+class _SoundDir:
+    """Resolve a wav file across the reference/ and examples/ sub-folders, so
+    that ``SOUND_DIR / "name.wav"`` keeps working regardless of which folder
+    the file lives in."""
+
+    def __init__(self, root: Path):
+        self._root = root
+        self._subdirs = (root / "reference", root / "examples")
+
+    def __truediv__(self, name: str) -> Path:
+        for d in self._subdirs:
+            cand = d / name
+            if cand.exists():
+                return cand
+        return self._subdirs[0] / name  # default to reference/ for clear errors
+
+
+SOUND_DIR = _SoundDir(_SF_ROOT)
 
 def ex_Loudness_ISO532_1():
 
@@ -284,7 +304,7 @@ def ex_PsychoacousticAnnoyance_Di2016():
 def ex_shm_loudness_ecma():
 
     # Use the same reference signal as the ISO example for comparability
-    soundfile = str(SOUND_DIR / "ExStereo_TrainStation7-0100-0130.wav")
+    soundfile = str(SOUND_DIR / "RefSignal_Loudness_ECMA418_2.wav")
 
     # Run the Sottek ECMA loudness wrapper on the file (audio input)
     OUT_shm = shm_loudness_ecma_wrapper(insig=soundfile,
@@ -328,9 +348,9 @@ def ex_shm_tonality_ecma():
     return OUT_shm
 
 
-#example = "shm_loudness_ecma"
+example = "shm_loudness_ecma"
 #example = "shm_roughness_ecma"
-example = "Tonality_Aures1985"
+# example = "Tonality_Aures1985"
 
 
 if __name__ == "__main__":

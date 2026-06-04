@@ -612,7 +612,7 @@ def _integrator(insig: np.ndarray, fs: int | float, mode: str) -> np.ndarray:
 # if __name__ == "__main__":
 #     # -------- locate the reference WAV file -------------------------------
 #     # Adjust 'basepath_SQAT' if your folder differs:
-#     wav_path = "sound_files\\reference_signals\\RefSignal_Loudness_ISO532_1.wav"
+#     wav_path = "sound_files\\reference\\RefSignal_Loudness_ISO532_1.wav"
 
 #     # -------- read audio & run the filter bank ----------------------------
 #     insig, fs = sf.read(wav_path)
