@@ -55,7 +55,7 @@ def      shm_loudness_ecma_fast_wrapper(insig, fs=None, field=0, method=1,
         raise ValueError("If insig is not a filename, fs must be provided.")
 
     # Call tonality to obtain spec components. Prefer the library plot when show is True
-    tonality = shm_tonality_ecma(insig, fs, axis=0, soundfield='free_frontal', wait_bar=True, out_plot=False)
+    tonality = shm_tonality_ecma(insig, fs, axis=0, soundfield='free_frontal', wait_bar=show, out_plot=False)
 
 
     if not isinstance(tonality, dict):
@@ -105,15 +105,19 @@ def      shm_loudness_ecma_fast_wrapper(insig, fs=None, field=0, method=1,
     if 'spec_loudness_powavg' in loudness:
         OUT['SpecificLoudness_powavg'] = loudness['spec_loudness_powavg']
 
-    # compute simple statistics similar to original wrapper
+    # compute simple statistics (honouring time_skip to match MATLAB convention)
     try:
         from utilities import get_statistics, export_dict_to_excel
         if 'InstantaneousLoudness' in OUT:
             inst = np.asarray(OUT['InstantaneousLoudness'])
-            if inst.ndim == 1:
-                stats = get_statistics(inst, 'shm_loudness_ecma')
-            else:
-                stats = get_statistics(inst, 'shm_loudness_ecma')
+            # flatten to 1-D (take first channel for multi-channel signals)
+            inst_1d = inst[:, 0].ravel() if inst.ndim > 1 else inst.ravel()
+            # apply time_skip: skip leading transient (same as MATLAB ECMA_time_skip)
+            time_arr = np.asarray(OUT.get('time', []))
+            if time_skip > 0 and time_arr.size > 0:
+                skip_idx = int(np.searchsorted(time_arr, time_skip))
+                inst_1d = inst_1d[skip_idx:] if skip_idx < inst_1d.size else inst_1d
+            stats = get_statistics(inst_1d, 'Loudness_ECMA418_2')
             for k, v in stats.items():
                 if k not in OUT:
                     OUT[k] = v
@@ -254,28 +258,26 @@ def      shm_loudness_ecma_fast_wrapper(insig, fs=None, field=0, method=1,
         except Exception:
             warnings.warn('Could not produce plots; matplotlib may be unavailable or data shapes unsupported.')
 
-    # Print concise summary similar to requested format
-    try:
-        header = 'Loudness (ECMA-418-2:2024 - Hearing Model of Sottek):'
-        print(header)
-        # If a filename was passed, show it
-        if isinstance(insig, str):
-            print(f"    - Stereo signal: {insig}")
-        # print per-channel and binaural values if present
-        if 'Loudness' in OUT:
-            L = np.asarray(OUT['Loudness'])
-            if L.ndim == 0:
-                print(f"    - Overall loudness value: {float(L):.5f} (sone).")
-            else:
-                if L.size >= 1:
-                    print(f"    - Overall loudness value (channel 1):  {float(L[0]):.5f} (sone).")
-                if L.size >= 2:
-                    print(f"    - Overall loudness value (channel 2):  {float(L[1]):.5f} (sone).")
-        if 'LoudnessBin' in OUT:
-            print(f"    - Overall loudness value (combined binaural):  {float(OUT['LoudnessBin']):.5f} (sone).")
-    except Exception:
-        # printing should never break function
-        pass
+    # Print concise summary only when explicitly requested
+    if show:
+        try:
+            header = 'Loudness (ECMA-418-2:2024 - Hearing Model of Sottek):'
+            print(header)
+            if isinstance(insig, str):
+                print(f"    - Stereo signal: {insig}")
+            if 'Loudness' in OUT:
+                L = np.asarray(OUT['Loudness'])
+                if L.ndim == 0:
+                    print(f"    - Overall loudness value: {float(L):.5f} (sone).")
+                else:
+                    if L.size >= 1:
+                        print(f"    - Overall loudness value (channel 1):  {float(L[0]):.5f} (sone).")
+                    if L.size >= 2:
+                        print(f"    - Overall loudness value (channel 2):  {float(L[1]):.5f} (sone).")
+            if 'LoudnessBin' in OUT:
+                print(f"    - Overall loudness value (combined binaural):  {float(OUT['LoudnessBin']):.5f} (sone).")
+        except Exception:
+            pass
 
     return OUT
 

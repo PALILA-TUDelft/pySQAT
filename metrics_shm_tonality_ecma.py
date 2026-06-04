@@ -63,7 +63,7 @@ def shm_tonality_ecma_wrapper(insig, fs=None, field=0, method=1,
 
     # Calculate Tonality: allow library plotting when show==True
     tonality_out = shm_tonality_ecma(insig, fs, soundfield=sound_field,
-                                     wait_bar=True, out_plot=True)
+                                     wait_bar=show, out_plot=False)
 
     if not isinstance(tonality_out, dict):
          raise RuntimeError("Unexpected return type from tonality function; expected dict.")
@@ -99,16 +99,23 @@ def shm_tonality_ecma_wrapper(insig, fs=None, field=0, method=1,
     OUT['timeInsig'] = get_val(tonality_out, ['time_insig', 'timeInsig'])
     OUT['soundField'] = sound_field
 
-    # Statistics
+    # Statistics (honouring time_skip to match MATLAB convention)
     if OUT['tonalityTDep'] is not None:
         try:
             from utilities import get_statistics, export_dict_to_excel
-            stats = get_statistics(OUT['tonalityTDep'], 'Tonality_ECMA418_2')
+            inst = np.asarray(OUT['tonalityTDep'])
+            # flatten to 1-D (first channel for multi-channel)
+            inst_1d = inst[:, 0].ravel() if inst.ndim > 1 else inst.ravel()
+            # apply time_skip — tonality uses 'timeOut', not 'time'
+            time_arr = np.asarray(OUT.get('timeOut', []))
+            if time_skip > 0 and time_arr.size > 0:
+                skip_idx = int(np.searchsorted(time_arr, time_skip))
+                inst_1d = inst_1d[skip_idx:] if skip_idx < inst_1d.size else inst_1d
+            stats = get_statistics(inst_1d, 'Tonality_ECMA418_2')
             for k, v in stats.items():
                 if k not in OUT:
                     OUT[k] = v
         except Exception:
-            # Optional stats/export; failure should not break wrapper
             pass
 
     if export_excel:
@@ -118,7 +125,7 @@ def shm_tonality_ecma_wrapper(insig, fs=None, field=0, method=1,
         except Exception:
             pass
 
-    if OUT.get('tonalityAvg') is not None:
+    if show and OUT.get('tonalityAvg') is not None:
         print(f"SHM ECMA Tonality: {OUT['tonalityAvg']} t.u.")
 
     # Plot results only if library did not produce plots (i.e. show == False)

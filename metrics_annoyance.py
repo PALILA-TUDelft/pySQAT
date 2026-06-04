@@ -891,8 +891,8 @@ def PsychoacousticAnnoyance_More2010(insig=None, fs=None, LoudnessField=None, ti
             if np.isinf(wt) or np.isnan(wt):
                 wt = 0
             
-            # More's modified psychoacoustic annoyance
-            PA_scalar = abs(L['N5'] * (1 + np.sqrt(gamma_0 + (gamma_1 * ws ** 2) + (gamma_2 * wfr ** 2) + (gamma_3 * wt))))
+            # More's modified psychoacoustic annoyance (complex sqrt; see loop note)
+            PA_scalar = abs(L['N5'] * (1 + np.sqrt(complex(gamma_0 + (gamma_1 * ws ** 2) + (gamma_2 * wfr ** 2) + (gamma_3 * wt)))))
             
 
             OUT['ScalarPA'] = PA_scalar  # Annoyance calculated from the percentiles of each variable
@@ -968,16 +968,13 @@ def PsychoacousticAnnoyance_More2010(insig=None, fs=None, LoudnessField=None, ti
                 wt[np.isinf(wt) | np.isnan(wt)] = 0
                 
                 # More's modified psychoacoustic annoyance
-                N_i  = float(np.maximum(L['InstantaneousLoudness'][i], 0.0))
-                ws_i = float(np.nan_to_num(ws[i],  nan=0.0, posinf=0.0, neginf=0.0))
-                wfr_i= float(np.nan_to_num(wfr[i], nan=0.0, posinf=0.0, neginf=0.0))
-                wt_i = float(np.nan_to_num(wt[i],  nan=0.0, posinf=0.0, neginf=0.0))  # if your wt can be negative by design, keep it; else clamp at 0
-
-                rad = gamma_0 + (gamma_1 * ws_i**2) + (gamma_2 * wfr_i**2) + (gamma_3 * wt_i)
-                rad = np.nan_to_num(rad, nan=0.0, neginf=0.0, posinf=0.0)
-                rad = max(rad, 0.0)
-
-                PA[i] = abs(N_i * (1.0 + np.sqrt(rad)))
+                # MATLAB: PA(i) = abs( N(i)*(1 + sqrt( gamma_0 + gamma_1*ws^2
+                #         + gamma_2*wfr^2 + gamma_3*wt )) ). Because gamma_0 < 0
+                # the radicand may be negative; MATLAB's sqrt then returns a
+                # complex value and the outer abs() takes its magnitude, i.e.
+                # N*sqrt(1+|rad|). The radicand must NOT be clamped to zero.
+                rad = gamma_0 + (gamma_1 * ws[i]**2) + (gamma_2 * wfr[i]**2) + (gamma_3 * wt[i])
+                PA[i] = abs(L['InstantaneousLoudness'][i] * (1.0 + np.sqrt(complex(rad))))
             
             OUT['wt'] = np.sqrt(wt)  # OUTPUT: tonality and loudness weighting function (not squared)
             OUT['wfr'] = wfr         # OUTPUT: fluctuation strength and sharpness weighting function (not squared)
@@ -1009,10 +1006,9 @@ def PsychoacousticAnnoyance_More2010(insig=None, fs=None, LoudnessField=None, ti
             if np.isinf(wt) or np.isnan(wt):
                 wt = 0
             
-            # More's modified psychoacoustic annoyance
+            # More's modified psychoacoustic annoyance (complex sqrt; see loop note)
             radicand = gamma_0 + (gamma_1 * ws**2) + (gamma_2 * wfr**2) + (gamma_3 * wt)
-            radicand = np.maximum(radicand, 0.0)
-            PA_scalar = abs(L['N5'] * (1 + np.sqrt(radicand)))
+            PA_scalar = abs(L['N5'] * (1 + np.sqrt(complex(radicand))))
             
             ## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
             # Output struct for time-varying signals
@@ -1118,10 +1114,9 @@ def PsychoacousticAnnoyance_More2010(insig=None, fs=None, LoudnessField=None, ti
         if np.isinf(wt) or np.isnan(wt):  # replace inf and NaN with zeros
             wt = 0
 
-        # More's modified psychoacoustic annoyance
+        # More's modified psychoacoustic annoyance (complex sqrt; see loop note)
         radicand = gamma_0 + (gamma_1 * ws**2) + (gamma_2 * wfr**2) + (gamma_3 * wt)
-        radicand = np.maximum(radicand, 0.0)
-        PA_scalar = abs(N * (1 + np.sqrt(radicand)))
+        PA_scalar = abs(N * (1 + np.sqrt(complex(radicand))))
 
         OUT = PA_scalar  # Annoyance calculated from the percentiles of each variable
 

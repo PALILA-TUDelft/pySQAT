@@ -63,7 +63,7 @@ def shm_roughness_ecma_wrapper(insig, fs=None, field=0, method=1,
 
     # Calculate Roughness: prefer library plotting when requested
     roughness_out = shm_roughness_ecma(p=insig, samp_rate_in=fs, axis=0,
-                                      soundfield=sound_field, wait_bar=True,
+                                      soundfield=sound_field, wait_bar=show,
                                       out_plot=False)
 
     if not isinstance(roughness_out, dict):
@@ -109,16 +109,23 @@ def shm_roughness_ecma_wrapper(insig, fs=None, field=0, method=1,
     OUT['InstantaneousRoughnessBin'] = get_val(roughness_out, ['roughness_t_bin', 'roughnessTDepBin'])
     OUT['RoughnessBin'] = get_val(roughness_out, ['roughness90pc_bin', 'roughness90pcBin'])
 
-    # Statistics: import get_statistics and export utility lazily like other wrappers
+    # Statistics (honouring time_skip to match MATLAB convention)
     if 'InstantaneousRoughness' in OUT:
         try:
             from utilities import get_statistics
-            stats = get_statistics(OUT['InstantaneousRoughness'], 'shm_roughness_ecma')
+            inst = np.asarray(OUT['InstantaneousRoughness'])
+            # flatten to 1-D (first channel for multi-channel)
+            inst_1d = inst[:, 0].ravel() if inst.ndim > 1 else inst.ravel()
+            # apply time_skip
+            time_arr = np.asarray(OUT.get('time', []))
+            if time_skip > 0 and time_arr.size > 0:
+                skip_idx = int(np.searchsorted(time_arr, time_skip))
+                inst_1d = inst_1d[skip_idx:] if skip_idx < inst_1d.size else inst_1d
+            stats = get_statistics(inst_1d, 'Roughness_ECMA418_2')
             for k, v in stats.items():
                 if k not in OUT:
                     OUT[k] = v
         except Exception:
-            # Optional statistics; do not fail the wrapper if utilities aren't available
             pass
 
     if export_excel:
@@ -128,7 +135,7 @@ def shm_roughness_ecma_wrapper(insig, fs=None, field=0, method=1,
         except Exception:
             pass
 
-    if 'Roughness' in OUT:
+    if show and 'Roughness' in OUT:
         print(f"SHM ECMA Roughness: {OUT['Roughness']} asper")
 
     # Plot results only if the library didn't create figures (i.e. show == False)

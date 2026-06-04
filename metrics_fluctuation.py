@@ -343,14 +343,17 @@ def il_cross_correlation(hBPi):
             ki[0, k] = 0
     
     try:
-        # Interpolation for last elements
-        f_interp = interp1d([0, 0.5], ki[0, Chno-4:Chno-2], kind='linear', fill_value='extrapolate')
-        ki[0, Chno-2] = f_interp(1)
-        ki[0, Chno-1] = f_interp(1)
-        
-        f_interp2 = interp1d([0.5, 1], ki[0, 2:4], kind='linear', fill_value='extrapolate')
-        ki[1, 1] = f_interp2(0)
-        ki[1, 0] = f_interp2(0)
+        # Boundary extrapolation, faithful to MATLAB (each element uses its own
+        # 2-point window; 2-point 'spline' == linear extrapolation). MATLAB:
+        #   ki(1,Chno-1) = interp1([0 0.5], ki(1,Chno-3:Chno-2), 1)
+        #   ki(1,Chno  ) = interp1([0 0.5], ki(1,Chno-2:Chno-1), 1)  (uses ki(1,Chno-1))
+        #   ki(2,2)      = interp1([0.5 1], ki(1,3:4), 0)
+        #   ki(2,1)      = interp1([0.5 1], ki(1,2:3), 0)
+        ki[0, Chno-2] = interp1d([0, 0.5], ki[0, Chno-4:Chno-2], kind='linear', fill_value='extrapolate')(1)
+        ki[0, Chno-1] = interp1d([0, 0.5], ki[0, Chno-3:Chno-1], kind='linear', fill_value='extrapolate')(1)
+
+        ki[1, 1] = interp1d([0.5, 1], ki[0, 2:4], kind='linear', fill_value='extrapolate')(0)
+        ki[1, 0] = interp1d([0.5, 1], ki[0, 1:3], kind='linear', fill_value='extrapolate')(0)
     except:
         ki[0, Chno-2] = ki[0, Chno-3]
         ki[0, Chno-1] = ki[0, Chno-3]
@@ -532,10 +535,10 @@ def TerhardtExcitationPatterns_v3(insig, fs, dBFS=100):
         for k in range(whichZ[1, l], params['Chno']+1):
             k_idx = k-1
             zk = k * 0.5
-            delta_z = zi - zk
             delta_z = zk - zi
             Stemp = S2[l] * delta_z + Li
-            if Stemp > params['MinBf'][k]:
+            # MATLAB: if Stemp > params.MinBf(k)  (1-based k -> 0-based k_idx)
+            if Stemp > params['MinBf'][k_idx]:
                 Slopes[l, k_idx] = 10**(Stemp/20)
                 Slopes_dB[l, k_idx] = Stemp
     

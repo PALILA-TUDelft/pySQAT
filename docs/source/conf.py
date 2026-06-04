@@ -60,7 +60,7 @@ exclude_patterns = []
 html_theme = "sphinx_rtd_theme"
 html_static_path = ['_static']
 
-html_logo = "images/logo_new_white.png"
+html_logo = os.path.abspath(os.path.join(CURRENT_DIR, "../../logos/logo_new_white.png"))
 html_theme_options = {
     'logo_only': True,
     'display_version': False,

@@ -204,7 +204,7 @@ def Roughness_Daniel1997(insig: ArrayLike, fs: int, time_skip: float = 0, show: 
     
     zb = np.sort(np.concatenate([Bf[0, :], Cf[0, :]])).astype(int)
     
-    # Ensure zb values are within the range of k_ht for interpolation
+    # MATLAB indexes MinExcdB with zb directly after building the band table.
     if len(MinExcdB) > 0:
         zb_clamped = np.clip(zb, 0, len(MinExcdB) - 1)
         MinBf = MinExcdB[zb_clamped]
@@ -221,8 +221,12 @@ def Roughness_Daniel1997(insig: ArrayLike, fs: int, time_skip: float = 0, show: 
 
     gzi = np.zeros(47)
     h0 = np.zeros(47)
-    k_range = np.arange(47)
-    
+    # MATLAB: k = 1:1:47; gzi(k) = sqrt(interp1(gr(1,:),gr(2,:),k/2,'spline'))
+    # The curve must be sampled at k/2 = 0.5, 1.0, ..., 23.5 (1-based k), not
+    # at 0, 0.5, ..., 23.0. Sampling half a Bark too low zeroes gzi[0] and
+    # undervalues the steeply-rising low-frequency channels.
+    k_range = np.arange(1, 48)
+
     # Use cubic spline interpolation
     interp_func = interp1d(gr[0, :], gr[1, :], kind='cubic', fill_value='extrapolate')
     gzi = np.sqrt(interp_func(k_range / 2))
@@ -432,11 +436,9 @@ def Roughness_Daniel1997(insig: ArrayLike, fs: int, time_skip: float = 0, show: 
     # Calibration between wav-level and loudness-level (assuming
     # blackman window and FFT will follow)
     Chno = 47  # number of channels
-    # Corrected calibration factor to fix 3.5% error in asper calculations
-    # Original value was 0.25, adjusted to account for 3.5% over-estimation
-    Cal = 0.5 #0.2415  # calibration factor adjusted to yield exactly 1 asper for reference signal (change from 0.25)
+    Cal = 0.5
     qb = np.arange(N0, Ntop + 1)
-    freqs = (qb + 1) * fs / N
+    freqs = (qb + 2) * fs / N
     hBPi = np.zeros((Chno, N))
     hBPrms = np.zeros(Chno)
     mdept = np.zeros(Chno)
@@ -474,14 +476,15 @@ def Roughness_Daniel1997(insig: ArrayLike, fs: int, time_skip: float = 0, show: 
         
         # Ensure freqs indexing is safe
         if sizL > 0:
-            # Filter freqs and LdB based on whichL
-            current_freqs = freqs[whichL]
+            # MATLAB uses freqs(w) instead of freqs(whichL(w)); preserve that
+            # behavior here for validation parity.
+            current_freqs = freqs[:sizL]
             current_LdB = LdB[whichL]
 
             for w in range(sizL):
                 # Steepness of upper slope [dB/Bark] in accordance with Terhardt
                 steep = -24 - (230 / current_freqs[w]) + (0.2 * current_LdB[w])
-                
+
                 if steep < 0:
                     S2[w] = steep  # set S2 with steepness value calculated earlier
 
@@ -492,8 +495,9 @@ def Roughness_Daniel1997(insig: ArrayLike, fs: int, time_skip: float = 0, show: 
             # Ensure Barkno indexing is safe
             barkno_indices = whichL[qd] + N01
             barkno_indices_clamped = np.clip(barkno_indices, 0, len(Barkno) - 1)
-            whichZ[0, :] = np.floor(2 * Barkno[barkno_indices_clamped]).astype(int)  # get bark band numbers
-            whichZ[1, :] = np.ceil(2 * Barkno[barkno_indices_clamped]).astype(int)
+            # Convert MATLAB's 1-based Bark channel ids to Python's 0-based indices.
+            whichZ[0, :] = np.floor(2 * Barkno[barkno_indices_clamped]).astype(int) - 1
+            whichZ[1, :] = np.ceil(2 * Barkno[barkno_indices_clamped]).astype(int) - 1
             
             # Clamp whichZ values to valid channel range [0, Chno-1]
             whichZ = np.clip(whichZ, 0, Chno - 1)
@@ -507,22 +511,18 @@ def Roughness_Daniel1997(insig: ArrayLike, fs: int, time_skip: float = 0, show: 
         for k_idx in range(sizL):  # loop over freq indices above threshold
             Ltmp = LdB[whichL[k_idx]]  # copy FFT magnitude (in dB) above threshold
             Btmp = Barkno[whichL[k_idx] + N01]  # and the bark number associated
-            
-            # Ensure MinBf indexing is safe
-            # MinBf has size 49 (indices 0-48)
-            # l can go up to 46 (Chno-1)
-            
+
             for l in range(min(whichZ[0, k_idx] + 1, Chno)): # loop up to floored bark number of freq index k
-                if l < len(MinBf): # Defensive check
-                    Stemp = (S1 * (Btmp - (l * 0.5))) + Ltmp
+                if l < len(MinBf):
+                    Stemp = (S1 * (Btmp - ((l + 1) * 0.5))) + Ltmp
                     if Stemp > MinBf[l]:
-                        Slopes[k_idx, l] = from_db(Stemp) # This is where Slopes is populated
-            
+                        Slopes[k_idx, l] = from_db(Stemp)
+
             for l in range(max(whichZ[1, k_idx], 0), Chno): # loop up to ceil'd bark number
-                if l < len(MinBf): # Defensive check
-                    Stemp = (S2[k_idx] * ((l * 0.5) - Btmp)) + Ltmp
+                if l < len(MinBf):
+                    Stemp = (S2[k_idx] * (((l + 1) * 0.5) - Btmp)) + Ltmp
                     if Stemp > MinBf[l]:
-                        Slopes[k_idx, l] = from_db(Stemp) # This is where Slopes is populated
+                        Slopes[k_idx, l] = from_db(Stemp)
 
         for k_idx in range(Chno):  # loop over each channel
             etmp = np.zeros(N, dtype=complex)

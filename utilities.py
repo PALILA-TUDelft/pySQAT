@@ -6,7 +6,6 @@
 import os
 import warnings
 import numpy as np
-import pandas as pd
 from numpy.lib.stride_tricks import sliding_window_view
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
@@ -14,7 +13,6 @@ from scipy.signal import firwin2, freqz, lfilter, sosfilt, sosfreqz, resample_po
 from scipy.io import wavfile
 from scipy.special import comb
 import soundfile as sf
-from IPython.display import Audio, display
 from pathlib import Path
 from typing import Union, Sequence, Any, Tuple, Optional, Dict, Literal
 import itertools
@@ -28,6 +26,7 @@ ArrayLike = Union[np.ndarray, float, int]
 # ----------------------
 
 def acquire(variable, name):
+        import pandas as pd
         if len(variable) > 1:
             if (np.iscomplex(variable[0]) or np.iscomplex(variable[-1]) or np.iscomplex(variable[len(variable)//3])) == True:
                 df = pd.DataFrame({
@@ -321,8 +320,16 @@ def get_exceeded_value(input: FloatArrayLike, PercentValue: float) -> np.ndarray
     # Sort the input array
     sort_input = np.sort(input, axis=0)
 
-    # Calculate the index corresponding to the exceeded value
-    X_index = int(np.ceil((1 - PercentValue / 100) * input.shape[0])) - 1
+    # Calculate the index corresponding to the exceeded value.
+    # Faithful to MATLAB get_exceeded_value:
+    #   X_index = floor((100-PercentValue)/100 * N);  if X_index==0, X_index=1
+    # (1-based); converted here to 0-based. Using floor (not ceil-1) matters
+    # whenever the index is non-integer, where the two conventions otherwise
+    # differ by one sorted element.
+    X_index = int(np.floor((100 - PercentValue) / 100 * input.shape[0]))
+    if X_index == 0:
+        X_index = 1
+    X_index = X_index - 1  # MATLAB 1-based -> Python 0-based
 
     # Clamp X_index to the valid range
     X_index = max(0, min(X_index, input.shape[0] - 1))
@@ -1005,6 +1012,7 @@ def export_dict_to_excel(data_dict, filename="output.xlsx"):
     """
 
 
+    import pandas as pd
     with pd.ExcelWriter(filename) as writer:
         for key, value in data_dict.items():
             try:

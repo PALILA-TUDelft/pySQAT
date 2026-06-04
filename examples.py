@@ -3,9 +3,9 @@ from typing import Dict, Any, Tuple
 
 from sound_metrics import *
 from utilities import *
-from metrics_loudness import Loudness_ISO532_1, EPNL_FAR_Part36
+from metrics_loudness import Loudness_ISO532_1
+from metrics_epnl import EPNL_FAR_Part36
 from metrics_shm_loudness_ecma_fast import shm_loudness_ecma_fast_wrapper as shm_loudness_ecma_wrapper
-# from metrics_shm_loudness_ecma import shm_loudness_ecma_wrapper
 from metrics_shm_roughness_ecma import shm_roughness_ecma_wrapper
 from metrics_shm_tonality_ecma import shm_tonality_ecma_wrapper
 from metrics_sharpness import Sharpness_DIN45692
@@ -15,8 +15,8 @@ from metrics_tonality import Tonality_Aures1985
 from metrics_annoyance import PsychoacousticAnnoyance_Zwicker1999, PsychoacousticAnnoyance_More2010, PsychoacousticAnnoyance_Di2016
 from pathlib import Path
 
-# Sound files directory relative to this examples module
-SOUND_DIR = Path(__file__).resolve().parent / "sound_files"
+# Bundled reference sound files directory relative to this examples module
+SOUND_DIR = Path(__file__).resolve().parent / "sound_files" / "reference_signals"
 
 def ex_Loudness_ISO532_1():
 

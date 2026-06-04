@@ -9,7 +9,7 @@ The toolbox has the following directories:
 - `sound_level_meter`: contains scripts to obtain sound pressure levels using different frequency weightings (A, B, C, D or Z) and time weightings (fast, slow, or impulse) (see [folder](sound_level_meter)). 
 - `utilities`: contains some scripts that are complementary to any of the toolbox functions (see [folder](utilities)).
 - `examples`: an example script is provided for each metric (see [folder](examples)).
-- `sound_files`: this directory hosts reference sounds in .wav format that are used mainly by the `examples` codes (see [folder](sound_files)). 
+- `sound_files`: this directory hosts the bundled reference sounds in `.wav` format, mainly under `reference_signals` (see [folder](../sound_files/reference_signals)). 
 - `validation`: this directory contains scripts used to validate each algorithm. Instructions on how to run these codes are provided in each respective folder and directly on the header of the codes (see [folder](validation)). 
 - `publications`: contains scripts to reproduce figures and/or tables of publications from the toolbox authors (see [folder](publications)). 
 

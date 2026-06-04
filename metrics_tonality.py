@@ -187,19 +187,11 @@ def Tonality_Aures1985(insig, fs, LoudnessField, time_skip, show=None):
             else:
                 idxrng2 = idxrng2_candidates[0] + idx + 1
 
-            xp = SPL[idxrng1:idxrng1+2]
-            fp = Freq[idxrng1:idxrng1+2]
-            if xp[0] > xp[1]:
-                xp = xp[::-1]
-                fp = fp[::-1]
-            flow[i] = np.interp(hafmax, xp, fp)
-
-            xp = SPL[idxrng2-1:idxrng2+1]
-            fp = Freq[idxrng2-1:idxrng2+1]
-            if xp[0] > xp[1]:
-                xp = xp[::-1]
-                fp = fp[::-1]
-            fhigh[i] = np.interp(hafmax, xp, fp)
+            # MATLAB interp1(...,'linear') returns NaN outside the data range,
+            # whereas np.interp clamps to the endpoints. Reproduce the MATLAB
+            # behaviour so that out-of-range cases yield NaN -> BW set to 1 below.
+            flow[i] = _il_interp1_linear(SPL[idxrng1:idxrng1+2], Freq[idxrng1:idxrng1+2], hafmax)
+            fhigh[i] = _il_interp1_linear(SPL[idxrng2-1:idxrng2+1], Freq[idxrng2-1:idxrng2+1], hafmax)
 
             BW[i] = fhigh[i] - flow[i]  # tone's bandwidth
             
@@ -401,6 +393,21 @@ def Tonality_Aures1985(insig, fs, LoudnessField, time_skip, show=None):
 #### LOCAL HELPER FUNCTIONS ####
 # ------------------------------
 
+def _il_interp1_linear(x, y, xq):
+    """
+    Replicate MATLAB ``interp1(x, y, xq, 'linear')`` for a small sample set:
+    linear interpolation that returns NaN when ``xq`` lies outside the range
+    of ``x`` (np.interp would clamp to the endpoints instead).
+    """
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+    if x[0] > x[-1]:  # np.interp requires increasing x
+        x = x[::-1]
+        y = y[::-1]
+    if xq < x[0] or xq > x[-1]:
+        return np.nan
+    return float(np.interp(xq, x, y))
+
 def il_SPL_excess(input_data):
     
     pref = 2e-5  # reference pressure, Pa
@@ -467,9 +474,15 @@ def il_SPL_excess(input_data):
         else:
             LXi = ToneL[i] - 10.0 * np.log10(AEK**2 + EGR + EHS)  # eq 4 from Ref. [3]
         
+        # Faithful to MATLAB: NTonesM is reset to 0 on every iteration, so the
+        # positive excess is always written to LX(1) (index 0 here). The final
+        # LX therefore holds the excess of the last tone with LXi>0, with all
+        # other entries left at 0.
+        NTonesM = 0
         if LXi > 0:
-            LX[i] = LXi
-    
+            NTonesM = NTonesM + 1
+            LX[NTonesM - 1] = LXi
+
     return LX
 
 def il_tonal_weighting(input_data):

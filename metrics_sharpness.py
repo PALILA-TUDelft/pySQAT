@@ -169,7 +169,11 @@ def Sharpness_DIN45692(insig: np.ndarray = None, fs: float = None, weight_type: 
         for i in range(SpecificLoudness.shape[0]):
             loudness_sones[i] = np.sum(SpecificLoudness[i, :]) * 0.10
 
-    z = np.linspace(0.1, 24, n)  # create bark axis
+    # MATLAB: z = linspace(0.1, 24, n)  (Bark axis: n points spanning 0.1..24).
+    # This is NOT the same as 0.1:0.1:24 unless n == 240; for the n returned by
+    # the loudness stage the linspace step differs from 0.1, so it must be
+    # reproduced exactly to match MATLAB.
+    z = np.linspace(0.1, 24, n)
 
     # Define method based on the size of the input specific loudness
     if SpecificLoudness.shape[0] == 1:
@@ -187,34 +191,25 @@ def Sharpness_DIN45692(insig: np.ndarray = None, fs: float = None, weight_type: 
         k = 0.11  # adjusted to yield 1 acum using SQAT - DIN45692 allows 0.105<=k<=0.0115 for this weighting function
         
         for i in range(SpecificLoudness.shape[0]):
-            den = float(loudness_sones[i])
-            if den <= 0 or not np.isfinite(den):
-                s[i] = 0.0
-            else:
-                s[i] = k * np.sum(SpecificLoudness[i] * g * z * 0.10) / den
-        
+            # MATLAB: s(i) = k * sum(SpecificLoudness(i,:).*g.*z.*0.10,2) ./ loudness_sones(i)
+            s[i] = k * np.sum(SpecificLoudness[i] * g * z * 0.10) / float(loudness_sones[i])
+
         ###########################################################################
     elif weight_type == 'aures':  # Aures model
-        
+
         g = np.zeros((SpecificLoudness.shape[0], len(z)))
         for i in range(SpecificLoudness.shape[0]):
             g[i, :] = il_sharpWeights(z, 'aures', loudness_sones[i])  # calculate sharpness weighting factor
-            den = float(loudness_sones[i])
-            if den <= 0 or not np.isfinite(den):
-                s[i] = 0.0
-            else:
-                s[i] = 0.11 * np.sum(SpecificLoudness[i, :] * g[i, :] * z * 0.10) / den
-        
+            # MATLAB: s(i) = 0.11 * sum(SpecificLoudness(i,:).*g(i,:).*z.*0.10,2) ./ loudness_sones(i)
+            s[i] = 0.11 * np.sum(SpecificLoudness[i, :] * g[i, :] * z * 0.10) / float(loudness_sones[i])
+
         ###########################################################################
     elif weight_type == 'bismarck':  # von Bismarck
         g = il_sharpWeights(z, 'bismarck', None)  # calculate sharpness weighting factor
-        
+
         for i in range(SpecificLoudness.shape[0]):
-            den = float(loudness_sones[i])
-            if den <= 0 or not np.isfinite(den):
-                s[i] = 0.0
-            else:
-                s[i] = 0.11 * np.sum(SpecificLoudness[i, :] * g * z * 0.10) / den
+            # MATLAB: s(i) = 0.11 * sum(SpecificLoudness(i,:).*g.*z.*0.10,2) ./ loudness_sones(i)
+            s[i] = 0.11 * np.sum(SpecificLoudness[i, :] * g * z * 0.10) / float(loudness_sones[i])
 
     ###############################################################################
     # Output struct for time-varying signals
