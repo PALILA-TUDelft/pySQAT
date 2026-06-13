@@ -63,7 +63,6 @@ def Tonality_Aures1985(insig, fs, LoudnessField, time_skip, show=None):
     0.12
     """
 
-
     if show is None:
         # If no return value is expected, show plots
         show = 1  # Assuming nargout equivalent is handled by caller
@@ -478,10 +477,8 @@ def il_SPL_excess(input_data):
         # positive excess is always written to LX(1) (index 0 here). The final
         # LX therefore holds the excess of the last tone with LXi>0, with all
         # other entries left at 0.
-        NTonesM = 0
         if LXi > 0:
-            NTonesM = NTonesM + 1
-            LX[NTonesM - 1] = LXi
+            LX[0] = LXi
 
     return LX
 
@@ -558,27 +555,25 @@ if __name__ == "__main__":
         Validation clip for Tonality_Aures1985
         -----------------------------------
 
-        Generates a 1-second, 1 kHz sinusoid at 60 dB SPL, sampled at 44.1 kHz.
+        Generates a 1 kHz sinusoid at 60 dB SPL, sampled at 48 kHz.
         """
 
         print("Running Tonality_Aures1985 test...")
 
-        fs = 48000              # Sampling rate in Hz
-        duration = 5.0          # Duration in seconds
-        f0 = 1000               # Frequency of pure tone (Hz)
-        Lp = 60                 # Desired sound pressure level (dB SPL)
-        pref = 20e-6            # Reference pressure in Pa
+        fs = 48000
+        duration = 5.0
+        f0 = 1000
+        Lp = 60
+        pref = 20e-6
+        time_skip = 0.5
 
-        # Create time vector
-        t = np.arange(0, duration, 1/fs)
-
-        # Generate sine wave with RMS level corresponding to 60 dB SPL
-        rms_target = pref * 10**(Lp / 20)
+        t = np.arange(0, duration, 1 / fs)
+        rms_target = pref * 10 ** (Lp / 20)
         amp = rms_target * np.sqrt(2)
         signal = amp * np.sin(2 * np.pi * f0 * t)
 
-        # Compute tonality using Aures 1985 model
-        result = Tonality_Aures1985(signal, fs=fs, LoudnessField=0, time_skip=0.5, show=True)
+        result = Tonality_Aures1985(signal, fs=fs, LoudnessField=0,
+                                    time_skip=time_skip, show=True)
 
         # Print statistics
         print("Tonality Statistics:")
