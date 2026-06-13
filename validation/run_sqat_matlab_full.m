@@ -67,10 +67,15 @@ fprintf('  %s\n', datestr(now, 'yyyy-mm-dd HH:MM:SS'));
 fprintf('============================================================\n\n');
 
 %% ── Paths ────────────────────────────────────────────────────────────────────
-SCRIPT_DIR = fileparts(mfilename('fullpath'));   % .../SQAT4PY/validation
-ROOT       = fileparts(SCRIPT_DIR);              % .../SQAT4PY
-SF_DIR     = fullfile(ROOT, 'sound_files', 'reference_signals');
-OUT_DIR    = fullfile(SCRIPT_DIR, 'matlab_results');
+SCRIPT_DIR  = fileparts(mfilename('fullpath'));   % .../SQAT4PY/validation
+ROOT        = fileparts(SCRIPT_DIR);              % .../SQAT4PY
+MATLAB_DIR  = fullfile(ROOT, 'original_matlab');  % SQAT MATLAB toolbox root
+SF_DIR      = fullfile(ROOT, 'sound_files');      % root; load_sig searches reference/ and examples/
+OUT_DIR     = fullfile(SCRIPT_DIR, 'matlab_results');
+
+% Bootstrap the SQAT toolbox path so all metric functions are visible.
+addpath(MATLAB_DIR);
+startup_SQAT([MATLAB_DIR filesep]);
 OUT_FILE   = fullfile(OUT_DIR, 'results_matlab.json');
 if ~exist(OUT_DIR, 'dir'), mkdir(OUT_DIR); end
 
@@ -632,7 +637,19 @@ fprintf('============================================================\n');
 function [insig, fs, dBFS_eff] = load_sig(sf_dir, fname, dBFS_in, tSPL)
 % Load WAV, convert to mono double, apply SQAT dBFS calibration.
 % If tSPL is not NaN, auto-compute dBFS so that RMS equals tSPL dBSPL.
-    fpath = fullfile(sf_dir, fname);
+% Searches sf_dir/reference/ then sf_dir/examples/ to mirror Python _resolve_sf.
+    subdirs = {'reference', 'examples'};
+    fpath   = '';
+    for k = 1:numel(subdirs)
+        cand = fullfile(sf_dir, subdirs{k}, fname);
+        if exist(cand, 'file')
+            fpath = cand;
+            break;
+        end
+    end
+    if isempty(fpath)
+        error('Audio file not found in %s/reference or %s/examples: %s', sf_dir, sf_dir, fname);
+    end
     [raw, fs] = audioread(fpath);
     if size(raw, 2) > 1, raw = mean(raw, 2); end   % stereo -> mono
     raw = double(raw);

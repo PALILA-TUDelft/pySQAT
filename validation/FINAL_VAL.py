@@ -797,8 +797,15 @@ def build_rows(python: dict[str, dict], matlab: dict | None) -> list[dict]:
                 verdict = "N/A"
                 if ref_val is not None and not np.isnan(py_val):
                     abs_err = py_val - ref_val
-                    if ref_val != 0:
+                    if ref_val != 0 and abs(ref_val) >= 5e-5:
+                        # Normal case: reference is large enough for a meaningful ratio.
                         rel_pct = 100.0 * abs_err / ref_val
+                    elif abs(abs_err) < 5e-5:
+                        # Both reference and absolute error are below the 4-decimal-place
+                        # display threshold: both show as "0.0000", so the error is
+                        # effectively zero → report 0.000 % and PASS.
+                        rel_pct = 0.0
+                    # else: ref_val ≈ 0 but abs_err is large — leave rel_pct = NaN / N/A.
                     if not np.isnan(rel_pct):
                         a = abs(rel_pct)
                         verdict = "PASS" if a < tol_p else ("WARN" if a < tol_f else "FAIL")
@@ -868,7 +875,7 @@ def _tex(s: str) -> str:
 
 def _tf(v, nd=4) -> str:
     if v is None or (isinstance(v, float) and np.isnan(v)):
-        return r"\text{--}"
+        return "--"
     return f"{v:.{nd}f}"
 
 def _tpct(v) -> str:
@@ -879,10 +886,11 @@ def _tpct(v) -> str:
 
 def _tverd(v: str) -> str:
     c = {"PASS": "passgreen", "WARN": "warnyellow", "FAIL": "failred"}.get(v)
-    return rf"\cellcolor{{{c}}}\textbf{{{v}}}" if c else r"\text{--}"
+    return rf"\cellcolor{{{c}}}\textbf{{{v}}}" if c else "--"
 
 _PREAMBLE = r"""\documentclass[a4paper,10pt]{article}
 \usepackage[top=2.2cm,bottom=2.2cm,left=2cm,right=2cm]{geometry}
+\usepackage{amsmath}
 \usepackage{booktabs,longtable,graphicx,float,xcolor,colortbl,caption,array,hyperref,microtype}
 \definecolor{passgreen} {HTML}{C6EFCE}
 \definecolor{warnyellow}{HTML}{FFEB9C}
@@ -925,20 +933,21 @@ def build_latex_table(mdef: dict, rows: list[dict], has_matlab: bool) -> str:
 
     prev_case = None
     for i, r in enumerate(metric_rows):
-        if r["case"] != prev_case:
+        first_in_case = r["case"] != prev_case
+        if first_in_case:
             if prev_case is not None:
                 A(r"\midrule")
             prev_case = r["case"]
 
-        bg  = r"\rowcolor{rowalt}" if i % 2 == 0 else ""
-        sk  = rf"\textbf{{{_tex(r['scalar'])}}}" if r["is_primary"] else _tex(r["scalar"])
-        cl  = _tex(r["case_label"]) if r["scalar"] == mdef["scalars"][0] and r["case"] != (prev_case or "") else ""
+        bg = r"\rowcolor{rowalt}" if i % 2 == 0 else ""
+        sk = rf"\textbf{{{_tex(r['scalar'])}}}" if r["is_primary"] else _tex(r["scalar"])
+        cl = _tex(r["case_label"]) if first_in_case else ""
         if has_matlab:
-            A(rf"{bg}{_tex(r['case_label'])} & {sk} & {_tf(r['py_val'])} & {_tf(r['mat_val'])} "
+            A(rf"{bg}{cl} & {sk} & {_tf(r['py_val'])} & {_tf(r['mat_val'])} "
               rf"& {_tf(r['abs_err'])} & ${_tpct(r['rel_pct'])}$ "
               rf"& $\pm{tol_p:.0f}\%$ & {_tverd(r['verdict'])} \\")
         else:
-            A(rf"{bg}{_tex(r['case_label'])} & {sk} & {_tf(r['py_val'])} & {_tf(r['ref_val'])} "
+            A(rf"{bg}{cl} & {sk} & {_tf(r['py_val'])} & {_tf(r['ref_val'])} "
               rf"& {_tf(r['abs_err'])} & {_tverd(r['verdict'])} \\")
 
     A(r"\end{longtable}")

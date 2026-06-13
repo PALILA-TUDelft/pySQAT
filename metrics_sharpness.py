@@ -129,11 +129,11 @@ def Sharpness_DIN45692(insig: np.ndarray = None, fs: float = None, weight_type: 
             # Ensure SpecificLoudness is at least 2D
             SpecificLoudness = np.atleast_2d(L['SpecificLoudness'])
             n = SpecificLoudness.shape[1]
-            loudness_sones = np.zeros((SpecificLoudness.shape[0], 1))  # pre allocate memory
-            
+            loudness_sones = np.zeros(SpecificLoudness.shape[0])  # pre allocate memory
+
             for i in range(SpecificLoudness.shape[0]):
                 loudness_sones[i] = np.sum(SpecificLoudness[i, :]) * 0.10
-        
+
         elif LoudnessMethod == 2:  # time-varying loudness calculation
             
             L = Loudness_ISO532_1(insig, fs,       # input signal and sampling freq.
@@ -145,11 +145,11 @@ def Sharpness_DIN45692(insig: np.ndarray = None, fs: float = None, weight_type: 
             # Ensure InstantaneousSpecificLoudness is at least 2D
             SpecificLoudness = np.atleast_2d(L['InstantaneousSpecificLoudness'])
             n = SpecificLoudness.shape[1]
-            loudness_sones = np.zeros((SpecificLoudness.shape[0], 1))  # pre allocate memory
-            
+            loudness_sones = np.zeros(SpecificLoudness.shape[0])  # pre allocate memory
+
             for i in range(SpecificLoudness.shape[0]):
                 loudness_sones[i] = np.sum(SpecificLoudness[i, :]) * 0.10
-                
+
         # Set time vector from loudness calculation
         if LoudnessMethod == 2:
             time = L['time']

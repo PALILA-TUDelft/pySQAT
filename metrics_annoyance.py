@@ -1008,7 +1008,7 @@ def PsychoacousticAnnoyance_More2010(insig=None, fs=None, LoudnessField=None, ti
             
             # More's modified psychoacoustic annoyance (complex sqrt; see loop note)
             radicand = gamma_0 + (gamma_1 * ws**2) + (gamma_2 * wfr**2) + (gamma_3 * wt)
-            PA_scalar = abs(L['N5'] * (1 + np.sqrt(complex(radicand))))
+            PA_scalar = abs(float(np.squeeze(L['N5'])) * (1 + np.sqrt(complex(float(np.squeeze(radicand))))))
             
             ## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
             # Output struct for time-varying signals
