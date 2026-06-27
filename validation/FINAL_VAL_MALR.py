@@ -4,16 +4,20 @@ FINAL_VAL_MALR.py
 Alternate validation script.  Reports per (metric, case):
 
   * Relative error on **mean** and **std** scalars  (as in FINAL_VAL.py)
-  * **Mean Absolute Log Ratio (MALR)** on the full instantaneous time series,
-    replacing the percentile comparisons (5th, 10th, 50th, 95th, …).
+  * **Normalised Mean Absolute Error (NMAE %)** on the full instantaneous
+    time series, replacing the percentile comparisons (5th, 10th, 50th,
+    95th, …).
 
-MALR is defined as:
+NMAE is defined as:
 
-    MALR = mean( |log10( py_t / ref_t )| )   over frames where both > 0
+    NMAE = 100 * mean( |py_t - ref_t| ) / mean( |ref_t| )   [%]
 
-A MALR of 0.01 corresponds to a typical multiplicative error of ±2.3 %
-(10^0.01 ≈ 1.023); 0.04 corresponds to ±10 %.  The metric is scale-invariant:
-a factor-of-2 error at 0.01 t.u. and at 1.0 t.u. both give MALR ≈ 0.30.
+It is the time-average of the absolute frame-by-frame error, expressed as a
+percentage of the mean reference level — i.e. the regular time-series average
+relative error.  Unlike the signed mean error (which reduces to the
+mean-scalar relative error), it does not let positive and negative deviations
+cancel, so it captures how far apart the two curves run on average.  It
+reuses each metric's scalar PASS/FAIL band.
 
 Outputs
 -------
@@ -66,54 +70,24 @@ for d in (PY_JSON.parent, FIG_DIR, HERE / "report", HERE / "comparison"):
 
 sys.path.insert(0, str(ROOT))
 
-# ── scalar tolerances (relative %, for mean/std rows) ─────────────────────────
+# ── scalar tolerances (relative %, for mean/std and NMAE rows) ────────────────
+#   The per-metric bands in mdef["tol"] drive the verdicts; these globals are
+#   only the fallback default.  NMAE (the time-series average relative error)
+#   reuses the same band as the mean/std scalars.
 TOL_PASS = 1.0
 TOL_FAIL = 2.0
-
-# ── MALR tolerances (adaptive, log10 units) ────────────────────────────────────
-#
-#   For each (metric, case) the PASS/FAIL thresholds adapt to the signal level:
-#
-#     tol_pass = max(MALR_FLOOR_PASS,  log10(1 + MALR_ABS_PASS / |µ|))
-#     tol_fail = max(MALR_FLOOR_FAIL,  log10(1 + MALR_ABS_FAIL / |µ|))
-#
-#   where µ = MATLAB mean of the primary scalar for that (metric, case).
-#
-#   Intuition:  MALR_ABS_PASS is the absolute error floor you are willing to
-#   accept (in metric units).  When µ ≈ 1 (reference signals) the formula gives
-#   a tight threshold log10(1 + ε) ≈ ε / ln(10).  When µ ≪ 1 (e.g. A320
-#   tonality ≈ 0.056 t.u.) the threshold widens so that the same absolute
-#   noise floor does not cause artificial FAILs.  MALR_FLOOR_* prevent the
-#   threshold from collapsing to zero for very high-mean signals.
-#
-# Override on CLI:
-#   --malr-abs-pass 0.002  --malr-abs-fail 0.010
-#   --malr-floor-pass 0.003  --malr-floor-fail 0.015
-MALR_ABS_PASS   = 0.002   # absolute accuracy floor → PASS  (metric units)
-MALR_ABS_FAIL   = 0.010   # absolute accuracy floor → FAIL  (metric units)
-MALR_FLOOR_PASS = 0.003   # hard minimum tolerance   (high-mean signals)
-MALR_FLOOR_FAIL = 0.015   # hard minimum fail threshold
 
 
 def _parse_tolerances(argv: list[str]) -> None:
     global TOL_PASS, TOL_FAIL
-    global MALR_ABS_PASS, MALR_ABS_FAIL, MALR_FLOOR_PASS, MALR_FLOOR_FAIL
     import argparse
     ap = argparse.ArgumentParser(add_help=True,
-                                 description="SQAT4PY MALR validation")
-    ap.add_argument("--pass-tol",        type=float, default=TOL_PASS)
-    ap.add_argument("--fail-tol",        type=float, default=TOL_FAIL)
-    ap.add_argument("--malr-abs-pass",   type=float, default=MALR_ABS_PASS)
-    ap.add_argument("--malr-abs-fail",   type=float, default=MALR_ABS_FAIL)
-    ap.add_argument("--malr-floor-pass", type=float, default=MALR_FLOOR_PASS)
-    ap.add_argument("--malr-floor-fail", type=float, default=MALR_FLOOR_FAIL)
+                                 description="SQAT4PY NMAE validation")
+    ap.add_argument("--pass-tol", type=float, default=TOL_PASS)
+    ap.add_argument("--fail-tol", type=float, default=TOL_FAIL)
     args, _ = ap.parse_known_args(argv)
-    TOL_PASS        = float(args.pass_tol)
-    TOL_FAIL        = float(args.fail_tol)
-    MALR_ABS_PASS   = float(args.malr_abs_pass)
-    MALR_ABS_FAIL   = float(args.malr_abs_fail)
-    MALR_FLOOR_PASS = float(args.malr_floor_pass)
-    MALR_FLOOR_FAIL = float(args.malr_floor_fail)
+    TOL_PASS = float(args.pass_tol)
+    TOL_FAIL = float(args.fail_tol)
 
 
 # ── metric imports ─────────────────────────────────────────────────────────────
@@ -138,7 +112,7 @@ except Exception:
 
 # ── metric registry ────────────────────────────────────────────────────────────
 #   scalars : only mean + std are compared per-scalar (with relative % error).
-#             Percentile statistics are dropped in favour of MALR.
+#             Percentile statistics are dropped in favour of NMAE.
 #   EPNL    : all three scalars kept (they are event-level quantities,
 #             not percentiles of a distribution).
 # ──────────────────────────────────────────────────────────────────────────────
@@ -478,26 +452,24 @@ def _spec_avg(arr) -> np.ndarray:
     return np.mean(a, axis=0) if a.ndim == 2 else a.ravel()
 
 
-# ── MALR helpers ───────────────────────────────────────────────────────────────
+# ── time-series error helpers ───────────────────────────────────────────────────
 
-def compute_malr(py_ts, ref_ts, py_t=None, ref_t=None) -> float:
-    """
-    Mean Absolute Log Ratio between two instantaneous time series.
+def _align_series(py_ts, ref_ts, py_t=None, ref_t=None):
+    """Align two instantaneous series for frame-by-frame comparison.
 
-    When both time vectors are supplied (and consistent with their series),
-    the Python series is resampled onto the MATLAB time base over the
-    overlapping interval, so frames are compared at *matching instants*
-    rather than by raw index — this guards against differing frame rates or
-    time_skip cropping between the two implementations.  When time vectors
-    are unavailable, falls back to index alignment on the common length.
-
-    Only frames where *both* values are strictly positive are included.
-    Returns NaN when no such frames exist (e.g. both signals are silent).
+    Returns ``(py_a, ref_a)`` sampled at matching instants.  When both time
+    vectors are supplied (and consistent with their series), the Python series
+    is resampled onto the MATLAB time base over the overlapping interval, so
+    frames are compared at *matching instants* rather than by raw index — this
+    guards against differing frame rates or time_skip cropping between the two
+    implementations.  When time vectors are unavailable, falls back to index
+    alignment on the common length.  Returns ``(None, None)`` when alignment
+    is impossible (empty inputs or no temporal overlap).
     """
     py  = np.asarray(py_ts,  dtype=float).ravel()
     ref = np.asarray(ref_ts, dtype=float).ravel()
     if py.size == 0 or ref.size == 0:
-        return float("nan")
+        return None, None
 
     pt = np.asarray(py_t,  dtype=float).ravel() if py_t  is not None else None
     rt = np.asarray(ref_t, dtype=float).ravel() if ref_t is not None else None
@@ -510,40 +482,34 @@ def compute_malr(py_ts, ref_ts, py_t=None, ref_t=None) -> float:
         t0, t1 = max(pt[0], rt[0]), min(pt[-1], rt[-1])
         sel = (rt >= t0) & (rt <= t1)
         if sel.sum() == 0:
-            return float("nan")
-        ref_a = ref[sel]
-        py_a  = np.interp(rt[sel], pt, py)
-    else:
-        # Fall back to index alignment on the common length.
-        n = min(py.size, ref.size)
-        py_a, ref_a = py[:n], ref[:n]
+            return None, None
+        return np.interp(rt[sel], pt, py), ref[sel]
 
-    mask = (py_a > 0.0) & (ref_a > 0.0)
-    if mask.sum() == 0:
-        return float("nan")
-    return float(np.mean(np.abs(np.log10(py_a[mask] / ref_a[mask]))))
+    # Fall back to index alignment on the common length.
+    n = min(py.size, ref.size)
+    return py[:n], ref[:n]
 
 
-def _adaptive_malr_tols(mean_ref: float) -> tuple[float, float]:
-    """Return (tol_pass, tol_fail) adapted to the signal level *mean_ref*.
-
-    Formula:  tol = max(floor, log10(1 + abs_floor / |mean_ref|))
-
-    When mean_ref ≈ 1 the log term is tiny and the floor dominates.
-    When mean_ref ≪ 1 the log term widens the threshold proportionally.
+def compute_nmae_pct(py_ts, ref_ts, py_t=None, ref_t=None) -> float:
     """
-    if not np.isfinite(mean_ref) or mean_ref <= 0.0:
-        return MALR_FLOOR_PASS, MALR_FLOOR_FAIL
-    mu = abs(mean_ref)
-    tol_p = max(MALR_FLOOR_PASS, np.log10(1.0 + MALR_ABS_PASS / mu))
-    tol_f = max(MALR_FLOOR_FAIL, np.log10(1.0 + MALR_ABS_FAIL / mu))
-    return tol_p, tol_f
+    Normalised Mean Absolute Error (%) between two instantaneous time series —
+    the regular time-series average relative error.
 
+        NMAE = 100 * mean( |py_t - ref_t| ) / mean( |ref_t| )
 
-def _malr_verdict(malr: float, tol_p: float, tol_f: float) -> str:
-    if np.isnan(malr):
-        return "N/A"
-    return "PASS" if malr < tol_p else ("WARN" if malr < tol_f else "FAIL")
+    It averages the absolute frame-by-frame error and expresses it as a
+    percentage of the mean reference level.  Series are aligned by
+    :func:`_align_series`.  All overlapping frames are used.  Returns NaN when
+    alignment fails or the reference level is zero.
+    """
+    py_a, ref_a = _align_series(py_ts, ref_ts, py_t, ref_t)
+    if py_a is None:
+        return float("nan")
+
+    denom = float(np.mean(np.abs(ref_a)))
+    if denom == 0.0 or not np.isfinite(denom):
+        return float("nan")
+    return float(100.0 * np.mean(np.abs(py_a - ref_a)) / denom)
 
 
 # ── per-metric Python runners (unchanged) ─────────────────────────────────────
@@ -835,16 +801,16 @@ def build_rows(python: dict[str, dict], matlab: dict | None) -> list[dict]:
     """
     For each (metric, case):
       - One row per scalar in mdef["scalars"]  (mean, std) with relative % error.
-      - One MALR row computed from the full instantaneous time series
-        (requires MATLAB vectors; skipped when matlab is None).
+      - One NMAE row (time-series average relative error, %) computed from the
+        full instantaneous time series (requires MATLAB vectors; skipped when
+        matlab is None).
     """
     rows: list[dict] = []
 
     for mdef in METRICS:
         mid      = mdef["id"]
         # Per-metric scalar tolerances (the global TOL_* are only a fallback
-        # default). These drive the mean/std verdicts; the MALR row uses its
-        # own adaptive thresholds and must NOT clobber these.
+        # default). These drive both the mean/std verdicts and the NMAE verdict.
         tol_p, tol_f = mdef.get("tol", (TOL_PASS, TOL_FAIL))
         py_mid   = python.get(mid, {})
         mat_mid  = (matlab or {}).get(mid, {})
@@ -912,11 +878,13 @@ def build_rows(python: dict[str, dict], matlab: dict | None) -> list[dict]:
                     "tol_f":        tol_f,
                     "verdict":      verdict,
                     "is_primary":   scalar == mdef["main_scalar"],
-                    "is_malr":      False,
                     "py_ok":        py_ok,
                 })
 
-            # ── MALR row (time-series comparison) ─────────────────────────────
+            # ── NMAE row (time-series average relative error, %) ───────────────
+            # An additive error on the full instantaneous curve, read on the
+            # same scale as the mean/std relative errors, so it reuses the
+            # metric's scalar PASS/FAIL band (tol_p, tol_f).
             ts_key = METRIC_CFG.get(mid, {}).get("time_key")
             if ts_key is None:
                 continue
@@ -927,28 +895,20 @@ def build_rows(python: dict[str, dict], matlab: dict | None) -> list[dict]:
             py_ts  = py_vecs.get(ts_key,  [])
             ref_ts = mat_vecs.get(ts_key, [])
 
-            # Only compute MALR when MATLAB time series is available.
+            # Only compute NMAE when the MATLAB time series is available.
             if not ref_ts:
                 continue
 
             # Pass the time vectors so the two series are compared at matching
             # instants (falls back to index alignment when times are absent).
-            malr = compute_malr(py_ts, ref_ts,
-                                py_vecs.get("time", []),
-                                mat_vecs.get("time", []))
-
-            # Adaptive thresholds: derive from the MATLAB mean of the primary
-            # scalar so that low-level signals get proportionally wider bands.
-            main_scalar = mdef["main_scalar"]
-            mean_ref_val = float("nan")
-            if main_scalar in mat_sc:
-                raw = mat_sc[main_scalar]
-                mean_ref_val = float(raw[0]) if isinstance(raw, list) else float(raw)
-
-            # Separate variables: do not overwrite the scalar tol_p/tol_f,
-            # which the next case's mean/std rows still rely on.
-            malr_tp, malr_tf = _adaptive_malr_tols(mean_ref_val)
-            verdict = _malr_verdict(malr, malr_tp, malr_tf)
+            nmae = compute_nmae_pct(py_ts, ref_ts,
+                                    py_vecs.get("time", []),
+                                    mat_vecs.get("time", []))
+            nmae_verdict = "N/A"
+            if np.isfinite(nmae):
+                a = abs(nmae)
+                nmae_verdict = ("PASS" if a < tol_p
+                                else "WARN" if a < tol_f else "FAIL")
 
             rows.append({
                 "metric":        mid,
@@ -956,19 +916,19 @@ def build_rows(python: dict[str, dict], matlab: dict | None) -> list[dict]:
                 "group":         mdef["group"],
                 "case":          case_name,
                 "case_label":    CASE_LABEL.get(case_name, case_name),
-                "scalar":        "MALR",
-                "unit":          "log₁₀",
-                "py_val":        malr,
+                "scalar":        "NMAE",
+                "unit":          "%",
+                "py_val":        nmae,
                 "mat_val":       None,
-                "ref_val":       mean_ref_val,   # µ used for threshold scaling
-                "ref_src":       "mean (adaptive scale)",
+                "ref_val":       None,
+                "ref_src":       "time-avg |err| / |ref|",
                 "abs_err":       float("nan"),
-                "rel_pct":       float("nan"),
-                "tol_p":         malr_tp,
-                "tol_f":         malr_tf,
-                "verdict":       verdict,
+                "rel_pct":       nmae,
+                "tol_p":         tol_p,
+                "tol_f":         tol_f,
+                "verdict":       nmae_verdict,
                 "is_primary":    False,
-                "is_malr":       True,
+                "is_nmae":       True,
                 "py_ok":         py_ok,
             })
 
@@ -993,22 +953,19 @@ def write_csv(rows: list[dict], csv_path: Path) -> None:
         w = csv.DictWriter(fh, fieldnames=fields)
         w.writeheader()
         for r in rows:
-            if r["is_malr"]:
-                mu_str = (_fmt(r["ref_val"], nd=4)
-                          if r["ref_val"] is not None and np.isfinite(r["ref_val"])
-                          else "N/A")
+            if r.get("is_nmae"):
                 w.writerow({
                     "metric":        r["metric"],
                     "case":          r["case"],
-                    "scalar":        "MALR",
-                    "unit":          "log10",
-                    "python_value":  _fmt(r["py_val"], nd=6),
-                    "matlab_value":  f"mu={mu_str}",   # µ used for adaptive scaling
-                    "ref_source":    "adaptive",
+                    "scalar":        "NMAE",
+                    "unit":          "%",
+                    "python_value":  _fmt(r["py_val"], nd=4),
+                    "matlab_value":  "n/a (time series)",
+                    "ref_source":    r["ref_src"],
                     "abs_error":     "N/A",
-                    "rel_error_pct": "N/A",
-                    "tol_pass":      f"<{r['tol_p']:.5f}",
-                    "tol_fail":      f">={r['tol_f']:.5f}",
+                    "rel_error_pct": _fmt(r["rel_pct"], nd=4),
+                    "tol_pass":      f"<{r['tol_p']}%",
+                    "tol_fail":      f">={r['tol_f']}%",
                     "status":        r["verdict"],
                 })
             else:
@@ -1105,12 +1062,11 @@ def build_latex_table(mdef: dict, rows: list[dict], has_matlab: bool) -> str:
         bg = r"\rowcolor{rowalt}" if i % 2 == 0 else ""
         cl = _tex(r["case_label"]) if first_in_case else ""
 
-        if r["is_malr"]:
-            malr_val = _tf(r["py_val"], nd=5)
-            mu_s     = _tf(r["ref_val"], nd=4) if r["ref_val"] is not None and np.isfinite(r["ref_val"]) else "--"
-            A(rf"{bg}{cl} & \textit{{MALR}} & {malr_val} "
-              rf"& \multicolumn{{2}}{{c}}{{\textit{{time-series log ratio}}}} "
-              rf"& $\mu={mu_s}$ & {_tverd(r['verdict'])} \\")
+        if r.get("is_nmae"):
+            nmae_s = _tf(r["py_val"], nd=3)
+            A(rf"{bg}{cl} & \textit{{NMAE}} "
+              rf"& \multicolumn{{3}}{{c}}{{\textit{{time-avg $|$err$|$ / $|$ref$|$}}}} "
+              rf"& ${nmae_s}\%$ & {_tverd(r['verdict'])} \\")
         else:
             sk = (rf"\textbf{{{_tex(r['scalar'])}}}" if r["is_primary"]
                   else _tex(r["scalar"]))
@@ -1126,49 +1082,39 @@ def build_latex_table(mdef: dict, rows: list[dict], has_matlab: bool) -> str:
     return "\n".join(L)
 
 
-def build_tol_table(mdef: dict, rows: list[dict]) -> str:
+def build_tol_table(mdef: dict) -> str:
     """Per-metric acceptance-tolerance table (separate from the results).
 
-    Lists the scalar relative-error band (PASS/FAIL, per metric) and the
-    adaptive MALR thresholds resolved for each audio case.
+    The scalar mean/std rows and the NMAE time-series error share a single
+    per-metric relative-error band.
     """
-    mid          = mdef["id"]
     tol_p, tol_f = mdef.get("tol", (TOL_PASS, TOL_FAIL))
-    malr_rows    = [r for r in rows if r["metric"] == mid and r["is_malr"]]
     scalars_str  = ", ".join(mdef["scalars"])
 
     L: list[str] = []
     A = L.append
 
-    A(r"\begin{longtable}{l l l r}")
+    A(r"\begin{longtable}{l l l}")
     A(r"\caption{Acceptance tolerances — " + _tex(mdef["label"]) +
-      r". Scalars use a fixed relative-error band; MALR uses adaptive "
-      r"log-ratio thresholds (see Methodology), where $\mu$ is the reference "
-      r"signal level driving the per-case thresholds.} \\")
+      r". The mean/std scalars and the NMAE time-series error share a fixed "
+      r"per-metric relative-error band (see Methodology).} \\")
     hdr = (r"\textbf{Quantity} & \textbf{PASS} ($\tau_\mathrm{pass}$) "
-           r"& \textbf{FAIL} ($\tau_\mathrm{fail}$) & $\mu$ \\")
+           r"& \textbf{FAIL} ($\tau_\mathrm{fail}$) \\")
     A(r"\toprule")
     A(hdr)
     A(r"\midrule\endfirsthead")
     A(r"\toprule " + hdr + r"\midrule\endhead")
     A(r"\bottomrule\endlastfoot")
 
-    A(rf"Scalars ({_tex(scalars_str)}) & $<{tol_p:g}\%$ & $\geq{tol_f:g}\%$ & -- \\")
-
-    if malr_rows:
-        A(r"\midrule")
-        for r in malr_rows:
-            mu_s = (rf"${_tf(r['ref_val'], nd=4)}$"
-                    if r["ref_val"] is not None and np.isfinite(r["ref_val"]) else "--")
-            A(rf"MALR — {_tex(r['case_label'])} & $<{r['tol_p']:.4f}$ & "
-              rf"$\geq{r['tol_f']:.4f}$ & {mu_s} \\")
+    A(rf"Scalars ({_tex(scalars_str)}) & $<{tol_p:g}\%$ & $\geq{tol_f:g}\%$ \\")
+    A(rf"NMAE (time series) & $<{tol_p:g}\%$ & $\geq{tol_f:g}\%$ \\")
 
     A(r"\end{longtable}")
     return "\n".join(L)
 
 
 def build_methodology_section() -> str:
-    """Explanatory page describing the scalar (mean/std) and MALR errors."""
+    """Explanatory page describing the scalar (mean/std) and NMAE errors."""
     L: list[str] = []
     A = L.append
 
@@ -1224,40 +1170,27 @@ def build_methodology_section() -> str:
     A(r"The exact PASS/FAIL values for each metric are repeated in its "
       r"tolerance table.")
 
-    A(r"\subsection{Time-series error (MALR)}")
+    A(r"\subsection{Time-series error (NMAE)}")
     A(r"To compare the full instantaneous curves rather than only their "
-      r"summary statistics, the \emph{Mean Absolute Log Ratio} is used:")
+      r"summary statistics, the \emph{normalised mean absolute error} averages "
+      r"the frame-by-frame absolute difference between the two curves and "
+      r"expresses it as a percentage of the mean reference level:")
     A(r"\begin{equation*}"
-      r"\mathrm{MALR}=\frac{1}{|\mathcal{F}|}\sum_{t\in\mathcal{F}}"
-      r"\left|\log_{10}\frac{x_\mathrm{py}(t)}{x_\mathrm{ref}(t)}\right|,"
+      r"\mathrm{NMAE}=100\,"
+      r"\frac{\frac{1}{|\mathcal{F}|}\sum_{t\in\mathcal{F}}"
+      r"\bigl|x_\mathrm{py}(t)-x_\mathrm{ref}(t)\bigr|}"
+      r"{\frac{1}{|\mathcal{F}|}\sum_{t\in\mathcal{F}}"
+      r"\bigl|x_\mathrm{ref}(t)\bigr|}\quad[\%],"
       r"\end{equation*}")
-    A(r"where $\mathcal{F}$ is the set of frames in which \emph{both} series "
-      r"are strictly positive. The Python series is resampled onto the MATLAB "
-      r"time base over the overlapping interval, so frames are compared at "
-      r"matching instants. MALR is a scale-invariant, multiplicative error "
-      r"measure: a value of $0.01$ corresponds to a typical deviation of "
-      r"$\pm2.3\%$ ($10^{0.01}\approx1.023$) and $0.04$ to $\pm10\%$, "
-      r"independent of the absolute signal level.")
-
-    A(r"\subsection{Adaptive MALR thresholds}")
-    A(r"A fixed \emph{absolute} difference produces a larger log-ratio on a "
-      r"low-level signal than on a high-level one. The MALR thresholds "
-      r"therefore adapt to the signal level $\mu$ (the MATLAB mean of the "
-      r"metric's primary scalar):")
-    A(r"\begin{equation*}"
-      r"\tau=\max\!\left(\tau_\mathrm{floor},\ "
-      r"\log_{10}\!\Big(1+\frac{\alpha}{\mu}\Big)\right),"
-      r"\end{equation*}")
-    A(rf"with absolute accuracy floors $\alpha_\mathrm{{pass}}={MALR_ABS_PASS}$ "
-      rf"and $\alpha_\mathrm{{fail}}={MALR_ABS_FAIL}$ (in metric units) and hard "
-      rf"minimum thresholds $\tau_\mathrm{{floor}}=({MALR_FLOOR_PASS},\,"
-      rf"{MALR_FLOOR_FAIL})$. For high-level signals ($\mu\gtrsim0.3$) the log "
-      r"term is negligible and the floor dominates, giving a tight, "
-      r"essentially constant band; for low-level signals ($\mu\ll1$) the band "
-      r"widens in proportion to $\alpha/\mu$, so that the same absolute noise "
-      r"floor does not cause artificial failures. If $\mu$ is undefined or "
-      r"non-positive, the floors are used. The resolved per-case values are "
-      r"tabulated in each metric's tolerance table.")
+    A(r"where $\mathcal{F}$ is the set of overlapping frames. The Python "
+      r"series is resampled onto the MATLAB time base over the overlapping "
+      r"interval, so frames are compared at matching instants. Note that the "
+      r"\emph{signed} mean error normalised by the reference level reduces "
+      r"algebraically to the mean-scalar relative error already reported; "
+      r"taking the \emph{absolute} value per frame prevents positive and "
+      r"negative deviations from cancelling, so NMAE measures how far apart "
+      r"the two curves run on average. It is read on the same scale as the "
+      r"scalar relative errors and uses the same per-metric PASS/FAIL band.")
     return "\n".join(L)
 
 
@@ -1298,15 +1231,15 @@ def write_latex(rows: list[dict], fig_files: dict[str, Path],
     A(r"\begin{titlepage}\centering\vspace*{2.5cm}")
     A(r"{\color{headblue}\rule{\linewidth}{2pt}}\vspace{0.4cm}")
     A(r"{\Huge\bfseries SQAT4PY\\[0.3em]"
-      r"\Large Full Metrics Validation Report (MALR edition)}")
+      r"\Large Full Metrics Validation Report}")
     A(r"\vspace{0.4cm}{\color{headblue}\rule{\linewidth}{2pt}}\vspace{1.5cm}")
     A(r"{\large\begin{tabular}{ll}")
     A(rf"\textbf{{Generated:}} & {_tex(ts)} \\[4pt]")
     A(rf"\textbf{{Reference:}} & {_tex(ref)} \\[4pt]")
-    A(rf"\textbf{{MALR thresholds:}} & adaptive $\log_{{10}}(1+\alpha/\mu)$; "
-      rf"$\alpha_\mathrm{{pass}}={MALR_ABS_PASS}$, "
-      rf"$\alpha_\mathrm{{fail}}={MALR_ABS_FAIL}$, "
-      rf"floors $({MALR_FLOOR_PASS},\,{MALR_FLOOR_FAIL})$ \\[4pt]")
+    A(r"\textbf{Error measures:} & mean/std relative error and NMAE "
+      r"(time-series average relative error) \\[4pt]")
+    A(r"\textbf{Acceptance band:} & per-metric relative-error band "
+      r"(shared by scalars and NMAE) \\[4pt]")
     A(rf"\textbf{{ECMA metrics:}} & "
       rf"{'Available' if _ECMA_OK else 'SKIPPED (sottek\\_hearing\\_model not installed)'} \\")
     A(r"\end{tabular}}\vfill"
@@ -1343,7 +1276,7 @@ def write_latex(rows: list[dict], fig_files: dict[str, Path],
                 A(r"\end{figure}")
 
             A(build_latex_table(mdef, rows, has_matlab))
-            A(build_tol_table(mdef, rows))
+            A(build_tol_table(mdef))
             A(r"\clearpage")
 
     A(r"\end{document}")
@@ -1353,12 +1286,20 @@ def write_latex(rows: list[dict], fig_files: dict[str, Path],
 # ── main ───────────────────────────────────────────────────────────────────────
 
 def main() -> None:
+    # The console summary contains non-ASCII glyphs (em dashes). On a default
+    # Windows console (cp1252) printing them raises UnicodeEncodeError, so
+    # force UTF-8 output when the stream supports reconfiguration.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8")
+            except Exception:
+                pass
+
     _parse_tolerances(sys.argv[1:])
-    print(f"  Scalar tolerances : per-metric (default PASS < {TOL_PASS:g}%   "
-          f"FAIL >= {TOL_FAIL:g}%)")
-    print(f"  MALR  tolerances  : adaptive  tol = log10(1 + alpha/mu)")
-    print(f"                      alpha_pass={MALR_ABS_PASS}  alpha_fail={MALR_ABS_FAIL}  "
-          f"floors=({MALR_FLOOR_PASS}, {MALR_FLOOR_FAIL})")
+    print(f"  Tolerances : per-metric relative-error band "
+          f"(default PASS < {TOL_PASS:g}%   FAIL >= {TOL_FAIL:g}%);")
+    print(f"               shared by mean/std scalars and NMAE.")
 
     python = run_all_python()
 
@@ -1370,7 +1311,7 @@ def main() -> None:
         print(f"\n  MATLAB results loaded <- {MAT_JSON}")
     else:
         print(f"\n  MATLAB results NOT found -- using theoretical references where available.")
-        print(f"  (MALR rows require MATLAB vectors and will be omitted)")
+        print(f"  (NMAE rows require MATLAB vectors and will be omitted)")
 
     rows = build_rows(python, matlab)
 
@@ -1408,8 +1349,8 @@ def main() -> None:
     print(f"  LaTeX -> {TEX_FILE}")
 
     # ── console summary ────────────────────────────────────────────────────────
-    scalar_rows = [r for r in rows if not r["is_malr"]]
-    malr_rows   = [r for r in rows if r["is_malr"]]
+    scalar_rows = [r for r in rows if not r.get("is_nmae")]
+    nmae_rows   = [r for r in rows if r.get("is_nmae")]
 
     print(f"\n{'='*70}")
     print("  SCALAR SUMMARY  (mean / std, reference signals only)")
@@ -1424,20 +1365,18 @@ def main() -> None:
         print(f"  {r['metric_label']:<38s}  {r['scalar']:<6s}  "
               f"{py_s:>8s}  {ref_s:>8s}  {rel_s:>8s}  {r['verdict']}")
 
-    if malr_rows:
+    if nmae_rows:
         print(f"\n{'='*80}")
-        print("  MALR SUMMARY  (all audio cases — lower is better, units: log₁₀)")
-        print(f"  {'Metric':<38s}  {'Case':<16s}  {'µ (ref)':>8s}  "
-              f"{'MALR':>8s}  {'tol_p':>7s}  {'tol_f':>7s}  Status")
+        print("  NMAE SUMMARY  (all audio cases — time-avg |error| / |ref|, units: %)")
+        print(f"  {'Metric':<38s}  {'Case':<16s}  {'NMAE%':>8s}  "
+              f"{'tol_p':>7s}  {'tol_f':>7s}  Status")
         print(f"  {'-'*75}")
-        for r in malr_rows:
-            malr_s = f"{r['py_val']:.5f}"  if np.isfinite(r["py_val"])  else "N/A"
-            mu_s   = f"{r['ref_val']:.4f}" if (r["ref_val"] is not None
-                                                and np.isfinite(r["ref_val"])) else "N/A"
-            tp_s   = f"{r['tol_p']:.4f}"
-            tf_s   = f"{r['tol_f']:.4f}"
+        for r in nmae_rows:
+            nmae_s = f"{r['py_val']:.3f}" if np.isfinite(r["py_val"]) else "N/A"
+            tp_s   = f"{r['tol_p']:g}%"
+            tf_s   = f"{r['tol_f']:g}%"
             print(f"  {r['metric_label']:<38s}  {r['case_label']:<16s}  "
-                  f"{mu_s:>8s}  {malr_s:>8s}  {tp_s:>7s}  {tf_s:>7s}  {r['verdict']}")
+                  f"{nmae_s:>8s}  {tp_s:>7s}  {tf_s:>7s}  {r['verdict']}")
 
     print(f"{'='*70}\n")
 
